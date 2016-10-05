@@ -1,5 +1,5 @@
 {
-  "name": "babel-cli",
+  "name": "@skillup/babel-cli",
   "version": "6.16.0",
   "description": "Babel command line.",
   "author": "Sebastian McKenzie <sebmck@gmail.com>",
