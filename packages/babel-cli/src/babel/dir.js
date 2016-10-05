@@ -6,7 +6,7 @@ let util           = require("./util");
 let fs             = require("fs");
 let _              = require("lodash");
 
-module.exports = function (commander, filenames) {
+module.exports = function (commander, filenames, opts) {
   function write(src, relative) {
     // remove extension and then append back on .js
     relative = relative.replace(/\.(\w*?)$/, "") + ".js";
@@ -71,7 +71,8 @@ module.exports = function (commander, filenames) {
     _.each(filenames, function (dirname) {
       let watcher = chokidar.watch(dirname, {
         persistent: true,
-        ignoreInitial: true
+        ignoreInitial: true,
+        ignored: opts.ignore
       });
 
       _.each(["add", "change"], function (type) {

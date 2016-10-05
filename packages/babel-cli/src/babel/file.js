@@ -153,7 +153,8 @@ module.exports = function (commander, filenames, opts) {
       let chokidar = util.requireChokidar();
       chokidar.watch(filenames, {
         persistent: true,
-        ignoreInitial: true
+        ignoreInitial: true,
+        ignored: opts.ignore
       }).on("all", function (type, filename) {
         if (util.shouldIgnore(filename) || !util.canCompile(filename, commander.extensions)) return;
 
