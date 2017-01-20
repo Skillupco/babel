@@ -1,9 +1,9 @@
-let traverse = require("../lib").default;
-let assert = require("assert");
-let parse = require("babylon").parse;
+const traverse = require("../lib").default;
+const assert = require("assert");
+const parse = require("babylon").parse;
 
 function getPath(code) {
-  let ast = parse(code);
+  const ast = parse(code);
   let path;
   traverse(ast, {
     Program: function (_path) {
@@ -83,6 +83,18 @@ describe("evaluation", function () {
     );
     assert.strictEqual(
       getPath(constExample).get("body.1.consequent.body.1").evaluate().value,
+      false
+    );
+  });
+
+  it("should deopt ids that are referenced before the bindings", function () {
+    assert.strictEqual(
+      getPath("let x = y + 5; let y = 5;").get("body.0.declarations.0.init").evaluate().confident,
+      false
+    );
+    assert.strictEqual(
+      getPath("if (typeof x === 'undefined') var x = {}")
+        .get("body.0.test").evaluate().confident,
       false
     );
   });

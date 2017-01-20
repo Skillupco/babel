@@ -33,7 +33,7 @@ export function getOpposite() {
 export function getCompletionRecords(): Array {
   let paths = [];
 
-  let add = function (path) {
+  const add = function (path) {
     if (path) paths = paths.concat(path.getCompletionRecords());
   };
 
@@ -69,7 +69,7 @@ export function getSibling(key) {
 
 export function get(key: string, context?: boolean | TraversalContext): NodePath {
   if (context === true) context = this.context;
-  let parts = key.split(".");
+  const parts = key.split(".");
   if (parts.length === 1) { // "foo"
     return this._getKey(key, context);
   } else { // "foo.bar"
@@ -78,8 +78,8 @@ export function get(key: string, context?: boolean | TraversalContext): NodePath
 }
 
 export function _getKey(key, context?) {
-  let node      = this.node;
-  let container = node[key];
+  const node      = this.node;
+  const container = node[key];
 
   if (Array.isArray(container)) {
     // requested a container so give them all the paths
@@ -104,7 +104,7 @@ export function _getKey(key, context?) {
 
 export function _getPattern(parts, context) {
   let path = this;
-  for (let part of (parts: Array)) {
+  for (const part of (parts: Array)) {
     if (part === ".") {
       path = path.parentPath;
     } else {
@@ -124,4 +124,65 @@ export function getBindingIdentifiers(duplicates?) {
 
 export function getOuterBindingIdentifiers(duplicates?) {
   return t.getOuterBindingIdentifiers(this.node, duplicates);
+}
+
+// original source - https://github.com/babel/babel/blob/master/packages/babel-types/src/retrievers.js
+// path.getBindingIdentifiers returns nodes where the following re-implementation
+// returns paths
+export function getBindingIdentifierPaths(duplicates = false, outerOnly = false) {
+  const path = this;
+  let search = [].concat(path);
+  const ids = Object.create(null);
+
+  while (search.length) {
+    const id = search.shift();
+    if (!id) continue;
+    if (!id.node) continue;
+
+    const keys = t.getBindingIdentifiers.keys[id.node.type];
+
+    if (id.isIdentifier()) {
+      if (duplicates) {
+        const _ids = ids[id.node.name] = ids[id.node.name] || [];
+        _ids.push(id);
+      } else {
+        ids[id.node.name] = id;
+      }
+      continue;
+    }
+
+    if (id.isExportDeclaration()) {
+      const declaration = id.get("declaration");
+      if (declaration.isDeclaration()) {
+        search.push(declaration);
+      }
+      continue;
+    }
+
+    if (outerOnly) {
+      if (id.isFunctionDeclaration()) {
+        search.push(id.get("id"));
+        continue;
+      }
+      if (id.isFunctionExpression()) {
+        continue;
+      }
+    }
+
+    if (keys) {
+      for (let i = 0; i < keys.length; i++) {
+        const key = keys[i];
+        const child = id.get(key);
+        if (Array.isArray(child) || child.node) {
+          search = search.concat(child);
+        }
+      }
+    }
+  }
+
+  return ids;
+}
+
+export function getOuterBindingIdentifierPaths(duplicates?) {
+  return this.getBindingIdentifierPaths(duplicates, true);
 }
