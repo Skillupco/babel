@@ -25,13 +25,13 @@ When your supported environments don't support certain features natively, it wil
 
 ```js
 // ES2015 arrow function
-[1,2,3].map(n => n + 1);
+[1, 2, 3].map((n) => n + 1);
 ```
 
 **Out**
 
 ```js
-[1,2,3].map(function(n) {
+[1, 2, 3].map(function(n) {
   return n + 1;
 });
 ```
@@ -202,6 +202,14 @@ Babel | Daniel Tschinder | Logan Smyth | Henry Zhu |
 | Juriy Zaytsev | Kai Cataldo | Moti Zilberman | Sven Sauleau | 
 | [@kangax](https://github.com/kangax) | [@kaicataldo](https://github.com/kaicataldo) | [@motiz88](https://github.com/motiz88) | [@xtuc](https://github.com/xtuc) |
 | [@kangax](https://twitter.com/kangax) | [@kai_cataldo](https://twitter.com/kai_cataldo) | [@motiz88](https://twitter.com/motiz88) | [@svensauleau](https://twitter.com/svensauleau) |
+
+### Non-Human Members
+
+[<img src="https://github.com/babel/babel-bot/raw/master/babel-bot.png" height="64">](https://github.com/babel-bot) | 
+|---|
+| Babel Bot |
+| [@babel-bot](https://github.com/babel-bot) |
+| [@babeljs](https://twitter.com/babeljs) |
 
 ### Inactive members
 
