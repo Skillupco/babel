@@ -4,10 +4,22 @@ import * as virtualTypes from "./lib/virtual-types";
 import buildDebug from "debug";
 import invariant from "invariant";
 import traverse from "../index";
-import assign from "lodash/assign";
 import Scope from "../scope";
 import * as t from "babel-types";
 import { path as pathCache } from "../cache";
+
+// NodePath is split across many files.
+import * as NodePath_ancestry from "./ancestry";
+import * as NodePath_inference from "./inference";
+import * as NodePath_replacement from "./replacement";
+import * as NodePath_evaluation from "./evaluation";
+import * as NodePath_conversion from "./conversion";
+import * as NodePath_introspection from "./introspection";
+import * as NodePath_context from "./context";
+import * as NodePath_removal from "./removal";
+import * as NodePath_modification from "./modification";
+import * as NodePath_family from "./family";
+import * as NodePath_comments from "./comments";
 
 const debug = buildDebug("babel");
 
@@ -93,18 +105,11 @@ export default class NodePath {
   }
 
   getScope(scope: Scope) {
-    let ourScope = scope;
-
-    // we're entering a new scope so let's construct it!
-    if (this.isScope()) {
-      ourScope = new Scope(this, scope);
-    }
-
-    return ourScope;
+    return this.isScope() ? new Scope(this) : scope;
   }
 
   setData(key: string, val: any): any {
-    return this.data[key] = val;
+    return (this.data[key] = val);
   }
 
   getData(key: string, def?: any): any {
@@ -121,14 +126,6 @@ export default class NodePath {
     traverse(this.node, visitor, this.scope, state, this);
   }
 
-  mark(type: string, message: string) {
-    this.hub.file.metadata.marked.push({
-      type,
-      message,
-      loc: this.node.loc
-    });
-  }
-
   set(key: string, node: Object) {
     t.validate(this.node, key, node);
     this.node[key] = node;
@@ -141,35 +138,38 @@ export default class NodePath {
       let key = path.key;
       if (path.inList) key = `${path.listKey}[${key}]`;
       parts.unshift(key);
-    } while (path = path.parentPath);
+    } while ((path = path.parentPath));
     return parts.join(".");
   }
 
-  debug(buildMessage: Function) {
+  debug(message) {
     if (!debug.enabled) return;
-    debug(`${this.getPathLocation()} ${this.type}: ${buildMessage()}`);
+    debug(`${this.getPathLocation()} ${this.type}: ${message}`);
   }
 }
 
-assign(NodePath.prototype, require("./ancestry"));
-assign(NodePath.prototype, require("./inference"));
-assign(NodePath.prototype, require("./replacement"));
-assign(NodePath.prototype, require("./evaluation"));
-assign(NodePath.prototype, require("./conversion"));
-assign(NodePath.prototype, require("./introspection"));
-assign(NodePath.prototype, require("./context"));
-assign(NodePath.prototype, require("./removal"));
-assign(NodePath.prototype, require("./modification"));
-assign(NodePath.prototype, require("./family"));
-assign(NodePath.prototype, require("./comments"));
+Object.assign(
+  NodePath.prototype,
+  NodePath_ancestry,
+  NodePath_inference,
+  NodePath_replacement,
+  NodePath_evaluation,
+  NodePath_conversion,
+  NodePath_introspection,
+  NodePath_context,
+  NodePath_removal,
+  NodePath_modification,
+  NodePath_family,
+  NodePath_comments,
+);
 
 for (const type of (t.TYPES: Array<string>)) {
   const typeKey = `is${type}`;
-  NodePath.prototype[typeKey] = function (opts) {
+  NodePath.prototype[typeKey] = function(opts) {
     return t[typeKey](this.node, opts);
   };
 
-  NodePath.prototype[`assert${type}`] = function (opts) {
+  NodePath.prototype[`assert${type}`] = function(opts) {
     if (!this[typeKey](opts)) {
       throw new TypeError(`Expected node path of type ${type}`);
     }
@@ -182,7 +182,7 @@ for (const type in virtualTypes) {
 
   const virtualType = virtualTypes[type];
 
-  NodePath.prototype[`is${type}`] = function (opts) {
+  NodePath.prototype[`is${type}`] = function(opts) {
     return virtualType.checkPath(this, opts);
   };
 }

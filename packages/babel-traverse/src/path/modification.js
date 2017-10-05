@@ -14,28 +14,36 @@ export function insertBefore(nodes) {
 
   nodes = this._verifyNodeList(nodes);
 
-  if (this.parentPath.isExpressionStatement() || this.parentPath.isLabeledStatement()) {
+  if (
+    this.parentPath.isExpressionStatement() ||
+    this.parentPath.isLabeledStatement()
+  ) {
     return this.parentPath.insertBefore(nodes);
   } else if (
-    this.isNodeType("Expression") ||
+    (this.isNodeType("Expression") &&
+      this.listKey !== "params" &&
+      this.listKey !== "arguments") ||
     (this.parentPath.isForStatement() && this.key === "init")
   ) {
     if (this.node) nodes.push(this.node);
-    this.replaceExpressionWithStatements(nodes);
-  } else {
-    this._maybePopFromStatements(nodes);
-    if (Array.isArray(this.container)) {
-      return this._containerInsertBefore(nodes);
-    } else if (this.isStatementOrBlock()) {
-      if (this.node) nodes.push(this.node);
-      this._replaceWith(t.blockStatement(nodes));
-    } else {
-      throw new Error("We don't know what to do with this node type. " +
-        "We were previously a Statement but we can't fit in here?");
-    }
-  }
+    return this.replaceExpressionWithStatements(nodes);
+  } else if (Array.isArray(this.container)) {
+    return this._containerInsertBefore(nodes);
+  } else if (this.isStatementOrBlock()) {
+    const shouldInsertCurrentNode =
+      this.node &&
+      (!this.isExpressionStatement() || this.node.expression != null);
 
-  return [this];
+    this.replaceWith(
+      t.blockStatement(shouldInsertCurrentNode ? [this.node] : []),
+    );
+    return this.unshiftContainer("body", nodes);
+  } else {
+    throw new Error(
+      "We don't know what to do with this node type. " +
+        "We were previously a Statement but we can't fit in here?",
+    );
+  }
 }
 
 export function _containerInsert(from, nodes) {
@@ -43,27 +51,14 @@ export function _containerInsert(from, nodes) {
 
   const paths = [];
 
+  this.container.splice(from, 0, ...nodes);
   for (let i = 0; i < nodes.length; i++) {
     const to = from + i;
-    const node = nodes[i];
-    this.container.splice(to, 0, node);
+    const path = this.getSibling(`${to}`);
+    paths.push(path);
 
-    if (this.context) {
-      const path = this.context.create(this.parent, this.container, to, this.listKey);
-
-      // While this path may have a context, there is currently no guarantee that the context
-      // will be the active context, because `popContext` may leave a final context in place.
-      // We should remove this `if` and always push once #4145 has been resolved.
-      if (this.context.queue) path.pushContext(this.context);
-      paths.push(path);
-    } else {
-      paths.push(NodePath.get({
-        parentPath: this.parentPath,
-        parent: this.parent,
-        container: this.container,
-        listKey: this.listKey,
-        key: to
-      }));
+    if (this.context && this.context.queue) {
+      path.pushContext(this.context);
     }
   }
 
@@ -71,7 +66,7 @@ export function _containerInsert(from, nodes) {
 
   for (const path of paths) {
     path.setScope();
-    path.debug(() => "Inserted.");
+    path.debug("Inserted.");
 
     for (const context of contexts) {
       context.maybeQueue(path, true);
@@ -89,16 +84,6 @@ export function _containerInsertAfter(nodes) {
   return this._containerInsert(this.key + 1, nodes);
 }
 
-export function _maybePopFromStatements(nodes) {
-  const last = nodes[nodes.length - 1];
-  const isIdentifier = t.isIdentifier(last) ||
-    (t.isExpressionStatement(last) && t.isIdentifier(last.expression));
-
-  if (isIdentifier && !this.isCompletionRecord()) {
-    nodes.pop();
-  }
-}
-
 /**
  * Insert the provided nodes after the current one. When inserting nodes after an
  * expression, ensure that the completion record is correct by pushing the current node.
@@ -109,7 +94,10 @@ export function insertAfter(nodes) {
 
   nodes = this._verifyNodeList(nodes);
 
-  if (this.parentPath.isExpressionStatement() || this.parentPath.isLabeledStatement()) {
+  if (
+    this.parentPath.isExpressionStatement() ||
+    this.parentPath.isLabeledStatement()
+  ) {
     return this.parentPath.insertAfter(nodes);
   } else if (
     this.isNodeType("Expression") ||
@@ -117,24 +105,29 @@ export function insertAfter(nodes) {
   ) {
     if (this.node) {
       const temp = this.scope.generateDeclaredUidIdentifier();
-      nodes.unshift(t.expressionStatement(t.assignmentExpression("=", temp, this.node)));
+      nodes.unshift(
+        t.expressionStatement(t.assignmentExpression("=", temp, this.node)),
+      );
       nodes.push(t.expressionStatement(temp));
     }
-    this.replaceExpressionWithStatements(nodes);
-  } else {
-    this._maybePopFromStatements(nodes);
-    if (Array.isArray(this.container)) {
-      return this._containerInsertAfter(nodes);
-    } else if (this.isStatementOrBlock()) {
-      if (this.node) nodes.unshift(this.node);
-      this._replaceWith(t.blockStatement(nodes));
-    } else {
-      throw new Error("We don't know what to do with this node type. " +
-        "We were previously a Statement but we can't fit in here?");
-    }
-  }
+    return this.replaceExpressionWithStatements(nodes);
+  } else if (Array.isArray(this.container)) {
+    return this._containerInsertAfter(nodes);
+  } else if (this.isStatementOrBlock()) {
+    const shouldInsertCurrentNode =
+      this.node &&
+      (!this.isExpressionStatement() || this.node.expression != null);
 
-  return [this];
+    this.replaceWith(
+      t.blockStatement(shouldInsertCurrentNode ? [this.node] : []),
+    );
+    return this.pushContainer("body", nodes);
+  } else {
+    throw new Error(
+      "We don't know what to do with this node type. " +
+        "We were previously a Statement but we can't fit in here?",
+    );
+  }
 }
 
 /**
@@ -178,7 +171,9 @@ export function _verifyNodeList(nodes) {
 
     if (msg) {
       const type = Array.isArray(node) ? "array" : typeof node;
-      throw new Error(`Node list ${msg} with the index of ${i} and type of ${type}`);
+      throw new Error(
+        `Node list ${msg} with the index of ${i} and type of ${type}`,
+      );
     }
   }
 
@@ -197,7 +192,7 @@ export function unshiftContainer(listKey, nodes) {
     parent: this.node,
     container: this.node[listKey],
     listKey,
-    key: 0
+    key: 0,
   });
 
   return path.insertBefore(nodes);
@@ -217,7 +212,7 @@ export function pushContainer(listKey, nodes) {
     parent: this.node,
     container: container,
     listKey,
-    key: container.length
+    key: container.length,
   });
 
   return path.replaceWithMultiple(nodes);

@@ -2,10 +2,22 @@ MAKEFLAGS = -j1
 
 export NODE_ENV = test
 
+# Fix color output until TravisCI fixes https://github.com/travis-ci/travis-ci/issues/7967
+export FORCE_COLOR = true
+
+SOURCES = packages codemods
+
 .PHONY: build build-dist watch lint fix clean test-clean test-only test test-ci publish bootstrap
 
 build: clean
+	make clean-lib
 	./node_modules/.bin/gulp build
+ifneq ("$(BABEL_ENV)", "cov")
+	make build-standalone
+endif
+
+build-standalone:
+	./node_modules/.bin/gulp build-babel-standalone --cwd=packages/babel-standalone/
 
 build-dist: build
 	cd packages/babel-polyfill; \
@@ -15,32 +27,29 @@ build-dist: build
 	node scripts/generate-babel-types-docs.js
 
 watch: clean
-	rm -rf packages/*/lib
-	./node_modules/.bin/gulp watch
+	make clean-lib
+	BABEL_ENV=development ./node_modules/.bin/gulp watch
 
 lint:
-	./node_modules/.bin/eslint packages/ --format=codeframe
+	./node_modules/.bin/eslint scripts $(SOURCES) *.js --format=codeframe --rulesdir="./eslint_rules"
 
 flow:
-	./node_modules/.bin/flow check
+	./node_modules/.bin/flow check --strip-root
 
 fix:
-	./node_modules/.bin/eslint packages/ --format=codeframe --fix
+	./node_modules/.bin/eslint scripts $(SOURCES) *.js --format=codeframe --fix --rulesdir="./eslint_rules"
 
 clean: test-clean
 	rm -rf packages/babel-polyfill/browser*
 	rm -rf packages/babel-polyfill/dist
+	# rm -rf packages/babel-runtime/helpers
+	# rm -rf packages/babel-runtime/core-js
 	rm -rf coverage
 	rm -rf packages/*/npm-debug*
 
 test-clean:
-	rm -rf packages/*/test/tmp
-	rm -rf packages/*/test-fixtures.json
-
-clean-all:
-	rm -rf node_modules
-	rm -rf packages/*/node_modules
-	make clean
+	$(foreach source, $(SOURCES), \
+		$(call clean-source-test, $(source)))
 
 test-only:
 	./scripts/test.sh
@@ -52,25 +61,57 @@ test-ci:
 	make bootstrap
 	make test-only
 
+test-ci-coverage: SHELL:=/bin/bash
 test-ci-coverage:
 	BABEL_ENV=cov make bootstrap
 	./scripts/test-cov.sh
-	./node_modules/.bin/codecov -f coverage/coverage-final.json
+	bash <(curl -s https://codecov.io/bash) -f coverage/coverage-final.json
 
 publish:
 	git pull --rebase
-	rm -rf packages/*/lib
+	make clean-lib
 	BABEL_ENV=production make build-dist
 	make test
 	# not using lerna independent mode atm, so only update packages that have changed since we use ^
-	./node_modules/.bin/lerna publish --only-explicit-updates
+	# --only-explicit-updates
+	./node_modules/.bin/lerna publish --force-publish=* --npm-tag=next --exact --skip-temp-tag
 	make clean
 
 bootstrap:
 	make clean-all
-	npm install
+	yarn
 	./node_modules/.bin/lerna bootstrap
 	make build
 	cd packages/babel-runtime; \
-	npm install; \
 	node scripts/build-dist.js
+
+clean-lib:
+	$(foreach source, $(SOURCES), \
+		$(call clean-source-lib, $(source)))
+
+clean-all:
+	rm -rf node_modules
+	rm -rf package-lock.json
+
+	$(foreach source, $(SOURCES), \
+		$(call clean-source-all, $(source)))
+
+	make clean
+
+define clean-source-lib
+	rm -rf $(1)/*/lib
+
+endef
+
+define clean-source-test
+	rm -rf $(1)/*/test/tmp
+	rm -rf $(1)/*/test-fixtures.json
+
+endef
+
+define clean-source-all
+	rm -rf $(1)/*/lib
+	rm -rf $(1)/*/node_modules
+	rm -rf $(1)/*/package-lock.json
+
+endef

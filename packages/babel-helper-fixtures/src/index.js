@@ -1,10 +1,14 @@
+import assert from "assert";
 import cloneDeep from "lodash/cloneDeep";
 import trimEnd from "lodash/trimEnd";
 import resolve from "try-resolve";
 import clone from "lodash/clone";
-import merge from "lodash/merge";
+import extend from "lodash/extend";
+import semver from "semver";
 import path from "path";
 import fs from "fs";
+
+const nodeVersion = semver.clean(process.version.slice(1));
 
 function humanize(val, noext) {
   if (noext) val = path.basename(val, path.extname(val));
@@ -12,25 +16,25 @@ function humanize(val, noext) {
 }
 
 type TestFile = {
-  loc: string;
-  code: string;
-  filename: string;
+  loc: string,
+  code: string,
+  filename: string,
 };
 
 type Test = {
-  title: string;
-  disabled: boolean;
-  options: Object;
-  exec: TestFile;
-  actual: TestFile;
-  expected: TestFile;
+  title: string,
+  disabled: boolean,
+  options: Object,
+  exec: TestFile,
+  actual: TestFile,
+  expected: TestFile,
 };
 
 type Suite = {
-  options: Object;
-  tests: Array<Test>;
-  title: string;
-  filename: string;
+  options: Object,
+  tests: Array<Test>,
+  title: string,
+  filename: string,
 };
 
 function assertDirectory(loc) {
@@ -47,7 +51,9 @@ function shouldIgnore(name, blacklist?: Array<string>) {
   const ext = path.extname(name);
   const base = path.basename(name, ext);
 
-  return name[0] === "." || ext === ".md" || base === "LICENSE" || base === "options";
+  return (
+    name[0] === "." || ext === ".md" || base === "LICENSE" || base === "options"
+  );
 }
 
 export default function get(entryLoc): Array<Suite> {
@@ -64,7 +70,7 @@ export default function get(entryLoc): Array<Suite> {
       options: clone(rootOpts),
       tests: [],
       title: humanize(suiteName),
-      filename: entryLoc + "/" + suiteName
+      filename: entryLoc + "/" + suiteName,
     };
 
     assertDirectory(suite.filename);
@@ -78,30 +84,52 @@ export default function get(entryLoc): Array<Suite> {
     }
 
     function push(taskName, taskDir) {
-      const actualLocAlias = suiteName + "/" + taskName + "/actual.js";
+      let actualLocAlias = suiteName + "/" + taskName + "/actual.js";
       let expectLocAlias = suiteName + "/" + taskName + "/expected.js";
-      const execLocAlias   = suiteName + "/" + taskName + "/exec.js";
+      let execLocAlias = suiteName + "/" + taskName + "/exec.js";
 
-      const actualLoc = taskDir + "/actual.js";
+      let actualLoc = taskDir + "/actual.js";
       let expectLoc = taskDir + "/expected.js";
-      let execLoc   = taskDir + "/exec.js";
+      let execLoc = taskDir + "/exec.js";
+
+      const hasExecJS = fs.existsSync(execLoc);
+      const hasExecMJS = fs.existsSync(asMJS(execLoc));
+      if (hasExecMJS) {
+        assert(!hasExecJS, `${asMJS(execLoc)}: Found conflicting .js`);
+
+        execLoc = asMJS(execLoc);
+        execLocAlias = asMJS(execLocAlias);
+      }
+
+      const hasExpectJS = fs.existsSync(expectLoc);
+      const hasExpectMJS = fs.existsSync(asMJS(expectLoc));
+      if (hasExpectMJS) {
+        assert(!hasExpectJS, `${asMJS(expectLoc)}: Found conflicting .js`);
+
+        expectLoc = asMJS(expectLoc);
+        expectLocAlias = asMJS(expectLocAlias);
+      }
+
+      const hasActualJS = fs.existsSync(actualLoc);
+      const hasActualMJS = fs.existsSync(asMJS(actualLoc));
+      if (hasActualMJS) {
+        assert(!hasActualJS, `${asMJS(actualLoc)}: Found conflicting .js`);
+
+        actualLoc = asMJS(actualLoc);
+        actualLocAlias = asMJS(actualLocAlias);
+      }
 
       if (fs.statSync(taskDir).isFile()) {
         const ext = path.extname(taskDir);
-        if (ext !== ".js" && ext !== ".module.js") return;
+        if (ext !== ".js" && ext !== ".mjs") return;
 
         execLoc = taskDir;
-      }
-
-      if (resolve.relative(expectLoc + "on")) {
-        expectLoc += "on";
-        expectLocAlias += "on";
       }
 
       const taskOpts = cloneDeep(suite.options);
 
       const taskOptsLoc = resolve(taskDir + "/options");
-      if (taskOptsLoc) merge(taskOpts, require(taskOptsLoc));
+      if (taskOptsLoc) extend(taskOpts, require(taskOptsLoc));
 
       const test = {
         optionsDir: taskOptsLoc ? path.dirname(taskOptsLoc) : null,
@@ -121,9 +149,27 @@ export default function get(entryLoc): Array<Suite> {
         expect: {
           loc: expectLoc,
           code: readFile(expectLoc),
-          filename: expectLocAlias
-        }
+          filename: expectLocAlias,
+        },
       };
+
+      // If there's node requirement, check it before pushing task
+      if (taskOpts.minNodeVersion) {
+        const minimumVersion = semver.clean(taskOpts.minNodeVersion);
+
+        if (minimumVersion == null) {
+          throw new Error(
+            `'minNodeVersion' has invalid semver format: ${taskOpts.minNodeVersion}`,
+          );
+        }
+
+        if (semver.lt(nodeVersion, minimumVersion)) {
+          return;
+        }
+
+        // Delete to avoid option validation error
+        delete taskOpts.minNodeVersion;
+      }
 
       // traceur checks
 
@@ -161,6 +207,10 @@ export function multiple(entryLoc, ignore?: Array<string>) {
   }
 
   return categories;
+}
+
+function asMJS(filepath) {
+  return filepath.replace(/\.js$/, ".mjs");
 }
 
 export function readFile(filename) {

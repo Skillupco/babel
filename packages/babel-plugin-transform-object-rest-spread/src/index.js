@@ -1,60 +1,120 @@
-export default function ({ types: t }) {
-  function hasRestProperty(path) {
-    let foundRestProperty = false;
+import syntaxObjectRestSpread from "babel-plugin-syntax-object-rest-spread";
+
+export default function({ types: t }) {
+  function hasRestElement(path) {
+    let foundRestElement = false;
     path.traverse({
-      RestProperty() {
-        foundRestProperty = true;
+      RestElement() {
+        foundRestElement = true;
         path.stop();
-      }
+      },
     });
-    return foundRestProperty;
+    return foundRestElement;
   }
 
   function hasSpread(node) {
-    for (const prop of (node.properties)) {
-      if (t.isSpreadProperty(prop)) {
+    for (const prop of node.properties) {
+      if (t.isSpreadElement(prop)) {
         return true;
       }
     }
     return false;
   }
 
-  function createObjectSpread(file, props, objRef) {
-    const restProperty = props.pop();
-
+  // returns an array of all keys of an object, and a status flag indicating if all extracted keys
+  // were converted to stringLiterals or not
+  // e.g. extracts {keys: ["a", "b", "3", ++x], allLiteral: false }
+  // from ast of {a: "foo", b, 3: "bar", [++x]: "baz"}
+  function extractNormalizedKeys(path) {
+    const props = path.node.properties;
     const keys = [];
+    let allLiteral = true;
+
     for (const prop of props) {
-      let key = prop.key;
-      if (t.isIdentifier(key) && !prop.computed) {
-        key = t.stringLiteral(prop.key.name);
+      if (t.isIdentifier(prop.key) && !prop.computed) {
+        // since a key {a: 3} is equivalent to {"a": 3}, use the latter
+        keys.push(t.stringLiteral(prop.key.name));
+      } else if (t.isLiteral(prop.key)) {
+        keys.push(t.stringLiteral(String(prop.key.value)));
+      } else {
+        keys.push(prop.key);
+        allLiteral = false;
       }
-      keys.push(key);
+    }
+
+    return { keys, allLiteral };
+  }
+
+  // replaces impure computed keys with new identifiers
+  // and returns variable declarators of these new identifiers
+  function replaceImpureComputedKeys(path) {
+    const impureComputedPropertyDeclarators = [];
+    for (const propPath of path.get("properties")) {
+      const key = propPath.get("key");
+      if (propPath.node.computed && !key.isPure()) {
+        const identifier = path.scope.generateUidIdentifierBasedOnNode(
+          key.node,
+        );
+        const declarator = t.variableDeclarator(identifier, key.node);
+        impureComputedPropertyDeclarators.push(declarator);
+        key.replaceWith(identifier);
+      }
+    }
+    return impureComputedPropertyDeclarators;
+  }
+
+  //expects path to an object pattern
+  function createObjectSpread(path, file, objRef) {
+    const props = path.get("properties");
+    const last = props[props.length - 1];
+    t.assertRestElement(last.node);
+    const restElement = t.clone(last.node);
+    last.remove();
+
+    const impureComputedPropertyDeclarators = replaceImpureComputedKeys(path);
+    const { keys, allLiteral } = extractNormalizedKeys(path);
+
+    let keyExpression;
+    if (!allLiteral) {
+      // map to toPropertyKey to handle the possible non-string values
+      keyExpression = t.callExpression(
+        t.memberExpression(t.arrayExpression(keys), t.identifier("map")),
+        [file.addHelper("toPropertyKey")],
+      );
+    } else {
+      keyExpression = t.arrayExpression(keys);
     }
 
     return [
-      restProperty.argument,
-      t.callExpression(
-        file.addHelper("objectWithoutProperties"), [
-          objRef,
-          t.arrayExpression(keys)
-        ]
-      )
+      impureComputedPropertyDeclarators,
+      restElement.argument,
+      t.callExpression(file.addHelper("objectWithoutProperties"), [
+        objRef,
+        keyExpression,
+      ]),
     ];
   }
 
-  function replaceRestProperty(parentPath, paramPath, i, numParams) {
+  function replaceRestElement(parentPath, paramPath, i, numParams) {
     if (paramPath.isAssignmentPattern()) {
-      replaceRestProperty(parentPath, paramPath.get("left"), i, numParams);
+      replaceRestElement(parentPath, paramPath.get("left"), i, numParams);
       return;
     }
 
-    if (paramPath.isObjectPattern() && hasRestProperty(paramPath)) {
+    if (paramPath.isArrayPattern() && hasRestElement(paramPath)) {
+      const elements = paramPath.get("elements");
+
+      for (let i = 0; i < elements.length; i++) {
+        replaceRestElement(parentPath, elements[i], i, elements.length);
+      }
+    }
+
+    if (paramPath.isObjectPattern() && hasRestElement(paramPath)) {
       const uid = parentPath.scope.generateUidIdentifier("ref");
 
       const declar = t.variableDeclaration("let", [
-        t.variableDeclarator(paramPath.node, uid)
+        t.variableDeclarator(paramPath.node, uid),
       ]);
-      declar._blockHoist = i ? numParams - i : 1;
 
       parentPath.ensureBlock();
       parentPath.get("body").unshiftContainer("body", declar);
@@ -63,90 +123,120 @@ export default function ({ types: t }) {
   }
 
   return {
-    inherits: require("babel-plugin-syntax-object-rest-spread"),
+    inherits: syntaxObjectRestSpread,
 
     visitor: {
       // taken from transform-es2015-parameters/src/destructuring.js
       // function a({ b, ...c }) {}
       Function(path) {
         const params = path.get("params");
-        for (let i = 0; i < params.length; i++) {
-          replaceRestProperty(params[i].parentPath, params[i], i, params.length);
+        for (let i = params.length - 1; i >= 0; i--) {
+          replaceRestElement(params[i].parentPath, params[i], i, params.length);
         }
       },
       // adapted from transform-es2015-destructuring/src/index.js#pushObjectRest
       // const { a, ...b } = c;
       VariableDeclarator(path, file) {
-        if (!path.get("id").isObjectPattern()) { return; }
+        if (!path.get("id").isObjectPattern()) {
+          return;
+        }
 
         let insertionPath = path;
 
-        path.get("id").traverse({
-          RestProperty(path) {
-            if (
-              // skip single-property case, e.g.
-              // const { ...x } = foo();
-              // since the RHS will not be duplicated
-              this.originalPath.node.id.properties.length > 1 &&
-              !t.isIdentifier(this.originalPath.node.init)
-            ) {
-              // const { a, ...b } = foo();
-              // to avoid calling foo() twice, as a first step convert it to:
-              // const _foo = foo(),
-              //       { a, ...b } = _foo;
-              const initRef = path.scope.generateUidIdentifierBasedOnNode(
-                this.originalPath.node.init, "ref");
-              // insert _foo = foo()
-              this.originalPath.insertBefore(t.variableDeclarator(initRef,
-                this.originalPath.node.init));
-              // replace foo() with _foo
-              this.originalPath.replaceWith(t.variableDeclarator(
-                this.originalPath.node.id, initRef));
-
-              return;
-            }
-
-            let ref = this.originalPath.node.init;
-
-            path.findParent((path) => {
-              if (path.isObjectProperty()) {
-                ref = t.memberExpression(ref, t.identifier(path.node.key.name));
-              } else if (path.isVariableDeclarator()) {
-                return true;
+        path.get("id").traverse(
+          {
+            RestElement(path) {
+              if (!path.parentPath.isObjectPattern()) {
+                // Return early if the parent is not an ObjectPattern, but
+                // (for example) an ArrayPattern or Function, because that
+                // means this RestElement is an not an object property.
+                return;
               }
-            });
 
-            const [ argument, callExpression ] = createObjectSpread(
-              file,
-              path.parentPath.node.properties,
-              ref
-            );
+              if (
+                // skip single-property case, e.g.
+                // const { ...x } = foo();
+                // since the RHS will not be duplicated
+                this.originalPath.node.id.properties.length > 1 &&
+                !t.isIdentifier(this.originalPath.node.init)
+              ) {
+                // const { a, ...b } = foo();
+                // to avoid calling foo() twice, as a first step convert it to:
+                // const _foo = foo(),
+                //       { a, ...b } = _foo;
+                const initRef = path.scope.generateUidIdentifierBasedOnNode(
+                  this.originalPath.node.init,
+                  "ref",
+                );
+                // insert _foo = foo()
+                this.originalPath.insertBefore(
+                  t.variableDeclarator(initRef, this.originalPath.node.init),
+                );
+                // replace foo() with _foo
+                this.originalPath.replaceWith(
+                  t.variableDeclarator(this.originalPath.node.id, initRef),
+                );
 
-            insertionPath.insertAfter(
-              t.variableDeclarator(
+                return;
+              }
+
+              let ref = this.originalPath.node.init;
+              const refPropertyPath = [];
+
+              path.findParent(path => {
+                if (path.isObjectProperty()) {
+                  refPropertyPath.unshift(path.node.key.name);
+                } else if (path.isVariableDeclarator()) {
+                  return true;
+                }
+              });
+
+              if (refPropertyPath.length) {
+                refPropertyPath.forEach(prop => {
+                  ref = t.memberExpression(ref, t.identifier(prop));
+                });
+              }
+
+              const objectPatternPath = path.findParent(path =>
+                path.isObjectPattern(),
+              );
+              const [
+                impureComputedPropertyDeclarators,
                 argument,
-                callExpression
-              )
-            );
+                callExpression,
+              ] = createObjectSpread(objectPatternPath, file, ref);
 
-            insertionPath = insertionPath.getSibling(insertionPath.key + 1);
+              t.assertIdentifier(argument);
 
-            if (path.parentPath.node.properties.length === 0) {
-              path.findParent(
-                (path) => path.isObjectProperty() || path.isVariableDeclarator()
-              ).remove();
-            }
-          }
-        }, {
-          originalPath: path
-        });
+              insertionPath.insertBefore(impureComputedPropertyDeclarators);
+
+              insertionPath.insertAfter(
+                t.variableDeclarator(argument, callExpression),
+              );
+
+              insertionPath = insertionPath.getSibling(insertionPath.key + 1);
+
+              if (objectPatternPath.node.properties.length === 0) {
+                objectPatternPath
+                  .findParent(
+                    path =>
+                      path.isObjectProperty() || path.isVariableDeclarator(),
+                  )
+                  .remove();
+              }
+            },
+          },
+          {
+            originalPath: path,
+          },
+        );
       },
       // taken from transform-es2015-destructuring/src/index.js#visitor
       // export var { a, ...b } = c;
       ExportNamedDeclaration(path) {
         const declaration = path.get("declaration");
         if (!declaration.isVariableDeclaration()) return;
-        if (!hasRestProperty(declaration)) return;
+        if (!hasRestElement(declaration)) return;
 
         const specifiers = [];
 
@@ -164,37 +254,45 @@ export default function ({ types: t }) {
       // try {} catch ({a, ...b}) {}
       CatchClause(path) {
         const paramPath = path.get("param");
-        replaceRestProperty(paramPath.parentPath, paramPath);
+        replaceRestElement(paramPath.parentPath, paramPath);
       },
       // ({a, ...b} = c);
       AssignmentExpression(path, file) {
         const leftPath = path.get("left");
-        if (leftPath.isObjectPattern() && hasRestProperty(leftPath)) {
+        if (leftPath.isObjectPattern() && hasRestElement(leftPath)) {
           const nodes = [];
 
-          let ref;
-          if (path.isCompletionRecord() || path.parentPath.isExpressionStatement()) {
-            ref = path.scope.generateUidIdentifierBasedOnNode(path.node.right, "ref");
-
-            nodes.push(t.variableDeclaration("var", [
-              t.variableDeclarator(ref, path.node.right)
-            ]));
-          }
-
-          const [ argument, callExpression ] = createObjectSpread(
-            file,
-            path.node.left.properties,
-            ref
+          const ref = path.scope.generateUidIdentifierBasedOnNode(
+            path.node.right,
+            "ref",
           );
+
+          nodes.push(
+            t.variableDeclaration("var", [
+              t.variableDeclarator(ref, path.node.right),
+            ]),
+          );
+
+          const [
+            impureComputedPropertyDeclarators,
+            argument,
+            callExpression,
+          ] = createObjectSpread(leftPath, file, ref);
+
+          if (impureComputedPropertyDeclarators.length > 0) {
+            nodes.push(
+              t.variableDeclaration("var", impureComputedPropertyDeclarators),
+            );
+          }
 
           const nodeWithoutSpread = t.clone(path.node);
           nodeWithoutSpread.right = ref;
           nodes.push(t.expressionStatement(nodeWithoutSpread));
-          nodes.push(t.toStatement(t.assignmentExpression(
-            "=",
-            argument,
-            callExpression
-          )));
+          nodes.push(
+            t.toStatement(
+              t.assignmentExpression("=", argument, callExpression),
+            ),
+          );
 
           if (ref) {
             nodes.push(t.expressionStatement(ref));
@@ -210,18 +308,18 @@ export default function ({ types: t }) {
         const left = node.left;
 
         // for ({a, ...b} of []) {}
-        if (t.isObjectPattern(left) && hasRestProperty(leftPath)) {
+        if (t.isObjectPattern(left) && hasRestElement(leftPath)) {
           const temp = scope.generateUidIdentifier("ref");
 
           node.left = t.variableDeclaration("var", [
-            t.variableDeclarator(temp)
+            t.variableDeclarator(temp),
           ]);
 
           path.ensureBlock();
 
-          node.body.body.unshift(t.variableDeclaration("var", [
-            t.variableDeclarator(left, temp)
-          ]));
+          node.body.body.unshift(
+            t.variableDeclaration("var", [t.variableDeclarator(left, temp)]),
+          );
 
           return;
         }
@@ -233,15 +331,15 @@ export default function ({ types: t }) {
 
         const key = scope.generateUidIdentifier("ref");
         node.left = t.variableDeclaration(left.kind, [
-          t.variableDeclarator(key, null)
+          t.variableDeclarator(key, null),
         ]);
 
         path.ensureBlock();
 
         node.body.body.unshift(
           t.variableDeclaration(node.left.kind, [
-            t.variableDeclarator(pattern, key)
-          ])
+            t.variableDeclarator(pattern, key),
+          ]),
         );
       },
       // var a = { ...b, ...c }
@@ -250,8 +348,10 @@ export default function ({ types: t }) {
 
         const useBuiltIns = file.opts.useBuiltIns || false;
         if (typeof useBuiltIns !== "boolean") {
-          throw new Error("transform-object-rest-spread currently only accepts a boolean " +
-            "option for useBuiltIns (defaults to false)");
+          throw new Error(
+            "transform-object-rest-spread currently only accepts a boolean " +
+              "option for useBuiltIns (defaults to false)",
+          );
         }
 
         const args = [];
@@ -264,7 +364,7 @@ export default function ({ types: t }) {
         }
 
         for (const prop of (path.node.properties: Array)) {
-          if (t.isSpreadProperty(prop)) {
+          if (t.isSpreadElement(prop)) {
             push();
             args.push(prop.argument);
           } else {
@@ -278,12 +378,12 @@ export default function ({ types: t }) {
           args.unshift(t.objectExpression([]));
         }
 
-        const helper = useBuiltIns ?
-          t.memberExpression(t.identifier("Object"), t.identifier("assign")) :
-          file.addHelper("extends");
+        const helper = useBuiltIns
+          ? t.memberExpression(t.identifier("Object"), t.identifier("assign"))
+          : file.addHelper("extends");
 
         path.replaceWith(t.callExpression(helper, args));
-      }
-    }
+      },
+    },
   };
 }

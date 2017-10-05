@@ -1,10 +1,12 @@
 // @flow
-var C = function () {
-  function C() {
-    babelHelpers.classCallCheck(this, C);
-  }
+var C =
+/*#__PURE__*/
+function () {
+  function C() {}
 
-  C.prototype.m = function m(x: number): string {
+  var _proto = C.prototype;
+
+  _proto.m = function m(x: number): string {
     return 'a';
   };
 

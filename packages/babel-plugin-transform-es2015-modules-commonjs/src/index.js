@@ -1,487 +1,165 @@
-import { basename, extname } from "path";
-import template from "babel-template";
-import * as t from "babel-types";
+import {
+  isModule,
+  rewriteModuleStatementsAndPrepareHeader,
+  isSideEffectImport,
+  buildNamespaceInitStatements,
+  ensureStatementsHoisted,
+  wrapInterop,
+} from "babel-helper-module-transforms";
+import simplifyAccess from "babel-helper-simple-access";
 
-const buildRequire = template(`
-  require($0);
-`);
+export default function({ types: t, template }) {
+  const moduleAssertion = template(`
+    (function(){
+      throw new Error("The CommonJS 'module' variable is not available in ES6 modules.");
+    })();
+  `);
+  const exportsAssertion = template(`
+    (function(){
+      throw new Error("The CommonJS 'exports' variable is not available in ES6 modules.");
+    })();
+  `);
+  const getAssertion = localName =>
+    (localName === "module" ? moduleAssertion() : exportsAssertion())
+      .expression;
 
-const buildExportsModuleDeclaration = template(`
-  Object.defineProperty(exports, "__esModule", {
-    value: true
-  });
-`);
-
-const buildExportsFrom = template(`
-  Object.defineProperty(exports, $0, {
-    enumerable: true,
-    get: function () {
-      return $1;
-    }
-  });
-`);
-
-const buildLooseExportsModuleDeclaration = template(`
-  exports.__esModule = true;
-`);
-
-const buildExportsAssignment = template(`
-  exports.$0 = $1;
-`);
-
-const buildExportAll = template(`
-  Object.keys(OBJECT).forEach(function (key) {
-    if (key === "default" || key === "__esModule") return;
-    Object.defineProperty(exports, key, {
-      enumerable: true,
-      get: function () {
-        return OBJECT[key];
-      }
-    });
-  });
-`);
-
-const THIS_BREAK_KEYS = ["FunctionExpression", "FunctionDeclaration", "ClassProperty",
-  "ClassMethod", "ObjectMethod"];
-
-export default function () {
-  const REASSIGN_REMAP_SKIP = Symbol();
-
-  const reassignmentVisitor = {
+  const moduleExportsVisitor = {
     ReferencedIdentifier(path) {
-      const name = path.node.name;
-      const remap = this.remaps[name];
-      if (!remap) return;
+      const localName = path.node.name;
+      if (localName !== "module" && localName !== "exports") return;
 
-      // redeclared in this scope
-      if (this.scope.getBinding(name) !== path.scope.getBinding(name)) return;
+      const localBinding = path.scope.getBinding(localName);
+      const rootBinding = this.scope.getBinding(localName);
 
-      if (path.parentPath.isCallExpression({ callee: path.node })) {
-        path.replaceWith(t.sequenceExpression([t.numericLiteral(0), remap]));
-      } else if (path.isJSXIdentifier() && t.isMemberExpression(remap)) {
-        const { object, property } = remap;
-        path.replaceWith(t.JSXMemberExpression(t.JSXIdentifier(object.name),
-          t.JSXIdentifier(property.name)));
-      } else {
-        path.replaceWith(remap);
-      }
-      this.requeueInParent(path);
-    },
-
-    AssignmentExpression(path) {
-      let node = path.node;
-      if (node[REASSIGN_REMAP_SKIP]) return;
-
-      const left = path.get("left");
-      if (!left.isIdentifier()) return;
-
-      const name = left.node.name;
-      const exports = this.exports[name];
-      if (!exports) return;
-
-      // redeclared in this scope
-      if (this.scope.getBinding(name) !== path.scope.getBinding(name)) return;
-
-      node[REASSIGN_REMAP_SKIP] = true;
-
-      for (const reid of exports) {
-        node = buildExportsAssignment(reid, node).expression;
-      }
-
-      path.replaceWith(node);
-      this.requeueInParent(path);
-    },
-
-    UpdateExpression(path) {
-      const arg = path.get("argument");
-      if (!arg.isIdentifier()) return;
-
-      const name = arg.node.name;
-      const exports = this.exports[name];
-      if (!exports) return;
-
-      // redeclared in this scope
-      if (this.scope.getBinding(name) !== path.scope.getBinding(name)) return;
-
-      const node = t.assignmentExpression(path.node.operator[0] + "=", arg.node, t.numericLiteral(1));
-
-      if ((path.parentPath.isExpressionStatement() && !path.isCompletionRecord()) || path.node.prefix) {
-        path.replaceWith(node);
-        this.requeueInParent(path);
+      if (
+        // redeclared in this scope
+        rootBinding !== localBinding ||
+        (path.parentPath.isObjectProperty({ value: path.node }) &&
+          path.parentPath.parentPath.isObjectPattern()) ||
+        path.parentPath.isAssignmentExpression({ left: path.node }) ||
+        path.isAssignmentExpression({ left: path.node })
+      ) {
         return;
       }
 
-      const nodes = [];
-      nodes.push(node);
+      path.replaceWith(getAssertion(localName));
+    },
 
-      let operator;
-      if (path.node.operator === "--") {
-        operator = "+";
-      } else { // "++"
-        operator = "-";
+    AssignmentExpression(path) {
+      const left = path.get("left");
+      if (left.isIdentifier()) {
+        const localName = path.node.name;
+        if (localName !== "module" && localName !== "exports") return;
+
+        const localBinding = path.scope.getBinding(localName);
+        const rootBinding = this.scope.getBinding(localName);
+
+        // redeclared in this scope
+        if (rootBinding !== localBinding) return;
+
+        const right = path.get("right");
+        right.replaceWith(
+          t.sequenceExpression([right.node, getAssertion(localName)]),
+        );
+      } else if (left.isPattern()) {
+        const ids = left.getOuterBindingIdentifiers();
+        const localName = Object.keys(ids).filter(localName => {
+          if (localName !== "module" && localName !== "exports") return false;
+
+          return (
+            this.scope.getBinding(localName) ===
+            path.scope.getBinding(localName)
+          );
+        })[0];
+
+        if (localName) {
+          const right = path.get("right");
+          right.replaceWith(
+            t.sequenceExpression([right.node, getAssertion(localName)]),
+          );
+        }
       }
-      nodes.push(t.binaryExpression(operator, arg.node, t.numericLiteral(1)));
-
-      path.replaceWithMultiple(t.sequenceExpression(nodes));
-    }
+    },
   };
 
   return {
-    inherits: require("babel-plugin-transform-strict-mode"),
-
     visitor: {
-      ThisExpression(path, state) {
-        // If other plugins run after this plugin's Program#exit handler, we allow them to
-        // insert top-level `this` values. This allows the AMD and UMD plugins to
-        // function properly.
-        if (this.ranCommonJS) return;
-
-        if (
-          state.opts.allowTopLevelThis !== true &&
-          !path.findParent((path) => !path.is("shadow") &&
-          THIS_BREAK_KEYS.indexOf(path.type) >= 0)
-        ) {
-          path.replaceWith(t.identifier("undefined"));
-        }
-      },
-
       Program: {
-        exit(path) {
-          this.ranCommonJS = true;
+        exit(path, state) {
+          // For now this requires unambiguous rather that just sourceType
+          // because Babel currently parses all files as sourceType:module.
+          if (!isModule(path, true /* requireUnambiguous */)) return;
 
-          const strict = !!this.opts.strict;
-          const noInterop = !!this.opts.noInterop;
+          const {
+            loose,
+            allowTopLevelThis,
+            strict,
+            strictMode,
+            noInterop,
 
-          const { scope } = path;
+            // Defaulting to 'true' for now. May change before 7.x major.
+            allowCommonJSExports = true,
+          } = state.opts;
 
-          // rename these commonjs variables if they're declared in the file
-          scope.rename("module");
-          scope.rename("exports");
-          scope.rename("require");
+          // Rename the bindings auto-injected into the scope so there is no
+          // risk of conflict between the bindings.
+          path.scope.rename("exports");
+          path.scope.rename("module");
+          path.scope.rename("require");
+          path.scope.rename("__filename");
+          path.scope.rename("__dirname");
 
-          let hasExports = false;
-          let hasImports = false;
+          // Rewrite references to 'module' and 'exports' to throw exceptions.
+          // These objects are specific to CommonJS and are not available in
+          // real ES6 implementations.
+          if (!allowCommonJSExports) {
+            simplifyAccess(path, new Set(["module", "exports"]));
+            path.traverse(moduleExportsVisitor, {
+              scope: path.scope,
+            });
+          }
 
-          const body: Array<Object> = path.get("body");
-          const imports = Object.create(null);
-          const exports = Object.create(null);
+          let moduleName = this.getModuleName();
+          if (moduleName) moduleName = t.stringLiteral(moduleName);
 
-          const nonHoistedExportNames = Object.create(null);
+          const {
+            meta,
+            headers,
+          } = rewriteModuleStatementsAndPrepareHeader(path, {
+            exportName: "exports",
+            loose,
+            strict,
+            strictMode,
+            allowTopLevelThis,
+            noInterop,
+          });
 
-          const topNodes = [];
-          const remaps = Object.create(null);
-
-          const requires = Object.create(null);
-
-          function addRequire(source, blockHoist) {
-            const cached = requires[source];
-            if (cached) return cached;
-
-            const ref = path.scope.generateUidIdentifier(basename(source, extname(source)));
-
-            const varDecl = t.variableDeclaration("var", [
-              t.variableDeclarator(ref, buildRequire(
-                t.stringLiteral(source)
-              ).expression)
+          for (const [source, metadata] of meta.source) {
+            const loadExpr = t.callExpression(t.identifier("require"), [
+              t.stringLiteral(source),
             ]);
 
-            // Copy location from the original import statement for sourcemap
-            // generation.
-            if (imports[source]) {
-              varDecl.loc = imports[source].loc;
-            }
-
-            if (typeof blockHoist === "number" && blockHoist > 0) {
-              varDecl._blockHoist = blockHoist;
-            }
-
-            topNodes.push(varDecl);
-
-            return requires[source] = ref;
-          }
-
-          function addTo(obj, key, arr) {
-            const existing = obj[key] || [];
-            obj[key] = existing.concat(arr);
-          }
-
-          for (const path of body) {
-            if (path.isExportDeclaration()) {
-              hasExports = true;
-
-              const specifiers = [].concat(path.get("declaration"), path.get("specifiers"));
-              for (const specifier of specifiers) {
-                const ids = specifier.getBindingIdentifiers();
-                if (ids.__esModule) {
-                  throw specifier.buildCodeFrameError("Illegal export \"__esModule\"");
-                }
-              }
-            }
-
-            if (path.isImportDeclaration()) {
-              hasImports = true;
-
-              const key = path.node.source.value;
-              const importsEntry = imports[key] || {
-                specifiers: [],
-                maxBlockHoist: 0,
-                loc: path.node.loc,
-              };
-
-              importsEntry.specifiers.push(...path.node.specifiers);
-
-              if (typeof path.node._blockHoist === "number") {
-                importsEntry.maxBlockHoist = Math.max(
-                  path.node._blockHoist,
-                  importsEntry.maxBlockHoist
-                );
-              }
-
-              imports[key] = importsEntry;
-
-              path.remove();
-            } else if (path.isExportDefaultDeclaration()) {
-              const declaration = path.get("declaration");
-              if (declaration.isFunctionDeclaration()) {
-                const id = declaration.node.id;
-                const defNode = t.identifier("default");
-                if (id) {
-                  addTo(exports, id.name, defNode);
-                  topNodes.push(buildExportsAssignment(defNode, id));
-                  path.replaceWith(declaration.node);
-                } else {
-                  topNodes.push(buildExportsAssignment(defNode, t.toExpression(declaration.node)));
-                  path.remove();
-                }
-              } else if (declaration.isClassDeclaration()) {
-                const id = declaration.node.id;
-                const defNode = t.identifier("default");
-                if (id) {
-                  addTo(exports, id.name, defNode);
-                  path.replaceWithMultiple([
-                    declaration.node,
-                    buildExportsAssignment(defNode, id)
-                  ]);
-                } else {
-                  path.replaceWith(buildExportsAssignment(defNode, t.toExpression(declaration.node)));
-
-                  // Manualy re-queue `export default class {}` expressions so that the ES3 transform
-                  // has an opportunity to convert them. Ideally this would happen automatically from the
-                  // replaceWith above. See #4140 for more info.
-                  path.parentPath.requeue(path.get("expression.left"));
-                }
-              } else {
-                path.replaceWith(buildExportsAssignment(t.identifier("default"), declaration.node));
-
-                // Manualy re-queue `export default foo;` expressions so that the ES3 transform
-                // has an opportunity to convert them. Ideally this would happen automatically from the
-                // replaceWith above. See #4140 for more info.
-                path.parentPath.requeue(path.get("expression.left"));
-              }
-            } else if (path.isExportNamedDeclaration()) {
-              const declaration = path.get("declaration");
-              if (declaration.node) {
-                if (declaration.isFunctionDeclaration()) {
-                  const id = declaration.node.id;
-                  addTo(exports, id.name, id);
-                  topNodes.push(buildExportsAssignment(id, id));
-                  path.replaceWith(declaration.node);
-                } else if (declaration.isClassDeclaration()) {
-                  const id = declaration.node.id;
-                  addTo(exports, id.name, id);
-                  path.replaceWithMultiple([
-                    declaration.node,
-                    buildExportsAssignment(id, id)
-                  ]);
-                  nonHoistedExportNames[id.name] = true;
-                } else if (declaration.isVariableDeclaration()) {
-                  const declarators = declaration.get("declarations");
-                  for (const decl of declarators) {
-                    const id = decl.get("id");
-
-                    const init = decl.get("init");
-                    if (!init.node) init.replaceWith(t.identifier("undefined"));
-
-                    if (id.isIdentifier()) {
-                      addTo(exports, id.node.name, id.node);
-                      init.replaceWith(buildExportsAssignment(id.node, init.node).expression);
-                      nonHoistedExportNames[id.node.name] = true;
-                    } else {
-                      // todo
-                    }
-                  }
-                  path.replaceWith(declaration.node);
-                }
-                continue;
-              }
-
-              const specifiers = path.get("specifiers");
-              const nodes = [];
-              const source = path.node.source;
-              if (source) {
-                const ref = addRequire(source.value, path.node._blockHoist);
-
-                for (const specifier of specifiers) {
-                  if (specifier.isExportNamespaceSpecifier()) {
-                    // todo
-                  } else if (specifier.isExportDefaultSpecifier()) {
-                    // todo
-                  } else if (specifier.isExportSpecifier()) {
-                    if (!noInterop && specifier.node.local.name === "default") {
-                      topNodes.push(buildExportsFrom(t.stringLiteral(specifier.node.exported.name),
-                        t.memberExpression(
-                          t.callExpression(this.addHelper("interopRequireDefault"), [ref]),
-                          specifier.node.local
-                        )
-                      ));
-                    } else {
-                      topNodes.push(buildExportsFrom(t.stringLiteral(specifier.node.exported.name),
-                        t.memberExpression(ref, specifier.node.local)));
-                    }
-                    nonHoistedExportNames[specifier.node.exported.name] = true;
-                  }
-                }
-              } else {
-                for (const specifier of specifiers) {
-                  if (specifier.isExportSpecifier()) {
-                    addTo(exports, specifier.node.local.name, specifier.node.exported);
-                    nonHoistedExportNames[specifier.node.exported.name] = true;
-                    nodes.push(buildExportsAssignment(specifier.node.exported, specifier.node.local));
-                  }
-                }
-              }
-              path.replaceWithMultiple(nodes);
-            } else if (path.isExportAllDeclaration()) {
-              const exportNode = buildExportAll({
-                OBJECT: addRequire(path.node.source.value, path.node._blockHoist)
-              });
-              exportNode.loc = path.node.loc;
-              topNodes.push(exportNode);
-              path.remove();
-            }
-          }
-
-          for (const source in imports) {
-            const { specifiers, maxBlockHoist } = imports[source];
-            if (specifiers.length) {
-              const uid = addRequire(source, maxBlockHoist);
-
-              let wildcard;
-
-              for (let i = 0; i < specifiers.length; i++) {
-                const specifier = specifiers[i];
-                if (t.isImportNamespaceSpecifier(specifier)) {
-                  if (strict || noInterop) {
-                    remaps[specifier.local.name] = uid;
-                  } else {
-                    const varDecl = t.variableDeclaration("var", [
-                      t.variableDeclarator(
-                        specifier.local,
-                        t.callExpression(
-                          this.addHelper("interopRequireWildcard"),
-                          [uid]
-                        )
-                      )
-                    ]);
-
-                    if (maxBlockHoist > 0) {
-                      varDecl._blockHoist = maxBlockHoist;
-                    }
-
-                    topNodes.push(varDecl);
-                  }
-                  wildcard = specifier.local;
-                } else if (t.isImportDefaultSpecifier(specifier)) {
-                  specifiers[i] = t.importSpecifier(specifier.local, t.identifier("default"));
-                }
-              }
-
-              for (const specifier of specifiers) {
-                if (t.isImportSpecifier(specifier)) {
-                  let target = uid;
-                  if (specifier.imported.name === "default") {
-                    if (wildcard) {
-                      target = wildcard;
-                    } else if (!noInterop) {
-                      target = wildcard = path.scope.generateUidIdentifier(uid.name);
-                      const varDecl = t.variableDeclaration("var", [
-                        t.variableDeclarator(
-                          target,
-                          t.callExpression(
-                            this.addHelper("interopRequireDefault"),
-                            [uid]
-                          )
-                        )
-                      ]);
-
-                      if (maxBlockHoist > 0) {
-                        varDecl._blockHoist = maxBlockHoist;
-                      }
-
-                      topNodes.push(varDecl);
-                    }
-                  }
-                  remaps[specifier.local.name] = t.memberExpression(target,
-                    t.cloneWithoutLoc(specifier.imported));
-                }
-              }
+            let header;
+            if (isSideEffectImport(metadata)) {
+              header = t.expressionStatement(loadExpr);
             } else {
-              // bare import
-              const requireNode = buildRequire(t.stringLiteral(source));
-              requireNode.loc = imports[source].loc;
-              topNodes.push(requireNode);
+              header = t.variableDeclaration("var", [
+                t.variableDeclarator(
+                  t.identifier(metadata.name),
+                  wrapInterop(path, loadExpr, metadata.interop) || loadExpr,
+                ),
+              ]);
             }
+            header.loc = metadata.loc;
+
+            headers.push(header);
+            headers.push(...buildNamespaceInitStatements(meta, metadata));
           }
 
-          if (hasImports && Object.keys(nonHoistedExportNames).length) {
-
-            // avoid creating too long of export assignment to prevent stack overflow
-            const maxHoistedExportsNodeAssignmentLength = 100;
-            const nonHoistedExportNamesArr = Object.keys(nonHoistedExportNames);
-
-            for (
-              let currentExportsNodeAssignmentLength = 0;
-              currentExportsNodeAssignmentLength < nonHoistedExportNamesArr.length;
-              currentExportsNodeAssignmentLength += maxHoistedExportsNodeAssignmentLength
-            ) {
-              const nonHoistedExportNamesChunk = nonHoistedExportNamesArr.slice(
-                currentExportsNodeAssignmentLength,
-                currentExportsNodeAssignmentLength + maxHoistedExportsNodeAssignmentLength);
-
-              let hoistedExportsNode = t.identifier("undefined");
-
-              nonHoistedExportNamesChunk.forEach(function (name) {
-                hoistedExportsNode = buildExportsAssignment(t.identifier(name), hoistedExportsNode)
-                  .expression;
-              });
-
-              const node = t.expressionStatement(hoistedExportsNode);
-              node._blockHoist = 3;
-
-              topNodes.unshift(node);
-            }
-          }
-
-          // add __esModule declaration if this file has any exports
-          if (hasExports && !strict) {
-            let buildTemplate = buildExportsModuleDeclaration;
-            if (this.opts.loose) buildTemplate = buildLooseExportsModuleDeclaration;
-
-            const declar = buildTemplate();
-            declar._blockHoist = 3;
-
-            topNodes.unshift(declar);
-          }
-
-          path.unshiftContainer("body", topNodes);
-          path.traverse(reassignmentVisitor, {
-            remaps,
-            scope,
-            exports,
-            requeueInParent: (newPath) => path.requeue(newPath),
-          });
-        }
-      }
-    }
+          ensureStatementsHoisted(headers);
+          path.unshiftContainer("body", headers);
+        },
+      },
+    },
   };
 }

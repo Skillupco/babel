@@ -1,77 +1,72 @@
-var plumber = require("gulp-plumber");
-var through = require("through2");
-var chalk   = require("chalk");
-var newer   = require("gulp-newer");
-var babel   = require("gulp-babel");
-var watch   = require("gulp-watch");
-var gutil   = require("gulp-util");
-var gulp    = require("gulp");
-var path    = require("path");
+"use strict";
 
-var scripts = "./packages/*/src/**/*.js";
+const plumber = require("gulp-plumber");
+const through = require("through2");
+const chalk = require("chalk");
+const newer = require("gulp-newer");
+const babel = require("gulp-babel");
+const watch = require("gulp-watch");
+const gutil = require("gulp-util");
+const gulp = require("gulp");
+const path = require("path");
+const merge = require("merge-stream");
 
-var srcEx, libFragment;
+const sources = ["codemods", "packages"];
 
-if (path.win32 === path) {
-  srcEx = /(packages\\[^\\]+)\\src\\/;
-  libFragment = "$1\\lib\\";
-} else {
-  srcEx = new RegExp("(packages/[^/]+)/src/");
-  libFragment = "$1/lib/";
+function swapSrcWithLib(srcPath) {
+  const parts = srcPath.split(path.sep);
+  parts[1] = "lib";
+  return parts.join(path.sep);
 }
 
-var mapToDest = function (path) { return path.replace(srcEx, libFragment); };
-var dest = "packages";
+function getGlobFromSource(source) {
+  return `./${source}/*/src/**/*.js`;
+}
 
 gulp.task("default", ["build"]);
 
-gulp.task("build", function () {
-  return gulp.src(scripts)
-    .pipe(plumber({
-      errorHandler: function (err) {
-        gutil.log(err.stack);
-      }
-    }))
-    .pipe(newer({map: mapToDest}))
-    .pipe(through.obj(function (file, enc, callback) {
-      gutil.log("Compiling", "'" + chalk.cyan(file.path) + "'...");
-      callback(null, file);
-    }))
-    .pipe(babel())
-    .pipe(through.obj(function (file, enc, callback) {
-      file._path = file.path;
-      file.path = mapToDest(file.path);
-      callback(null, file);
-    }))
-    .pipe(gulp.dest(dest));
+gulp.task("build", function() {
+  return merge(
+    sources.map(source => {
+      const base = path.join(__dirname, source);
+
+      return gulp
+        .src(getGlobFromSource(source), { base: base })
+        .pipe(
+          plumber({
+            errorHandler: function(err) {
+              gutil.log(err.stack);
+            },
+          })
+        )
+        .pipe(
+          newer({
+            dest: base,
+            map: swapSrcWithLib,
+          })
+        )
+        .pipe(
+          through.obj(function(file, enc, callback) {
+            gutil.log("Compiling", "'" + chalk.cyan(file.relative) + "'...");
+            callback(null, file);
+          })
+        )
+        .pipe(babel())
+        .pipe(
+          through.obj(function(file, enc, callback) {
+            // Passing 'file.relative' because newer() above uses a relative
+            // path and this keeps it consistent.
+            file.path = path.resolve(file.base, swapSrcWithLib(file.relative));
+            callback(null, file);
+          })
+        )
+        .pipe(gulp.dest(base));
+    })
+  );
 });
 
-// TODO: remove this section
-// temporarily just copying the old code since watch isn't working
-var dest = "packages";
-gulp.task("build-watch", function () {
-  return gulp.src(scripts)
-    .pipe(plumber({
-      errorHandler: function (err) {
-        gutil.log(err.stack);
-      }
-    }))
-    .pipe(through.obj(function (file, enc, callback) {
-      file._path = file.path;
-      file.path = file.path.replace(srcEx, libFragment);
-      callback(null, file);
-    }))
-    .pipe(newer(dest))
-    .pipe(through.obj(function (file, enc, callback) {
-      gutil.log("Compiling", "'" + chalk.cyan(file._path) + "'...");
-      callback(null, file);
-    }))
-    .pipe(babel())
-    .pipe(gulp.dest(dest));
-});
-
-gulp.task("watch", ["build-watch"], function (callback) {
-  watch(scripts, {debounceDelay: 200}, function () {
-    gulp.start("build-watch");
+gulp.task("watch", ["build"], function() {
+  watch(sources.map(getGlobFromSource), { debounceDelay: 200 }, function() {
+    gulp.start("build");
   });
 });

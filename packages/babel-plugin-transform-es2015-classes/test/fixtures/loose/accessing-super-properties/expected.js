@@ -1,11 +1,12 @@
-var Test = function (_Foo) {
-  babelHelpers.inherits(Test, _Foo);
+var Test =
+/*#__PURE__*/
+function (_Foo) {
+  babelHelpers.inheritsLoose(Test, _Foo);
 
   function Test() {
-    babelHelpers.classCallCheck(this, Test);
+    var _this;
 
-    var _this = babelHelpers.possibleConstructorReturn(this, _Foo.call(this));
-
+    _this = _Foo.call(this) || this;
     _Foo.prototype.test;
     _Foo.prototype.test.whatever;
     return _this;

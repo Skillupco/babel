@@ -1,80 +1,140 @@
-export default function ({ types: t }) {
-  function isString(node) {
-    return t.isLiteral(node) && typeof node.value === "string";
-  }
+import annotateAsPure from "babel-helper-annotate-as-pure";
 
-  function buildBinaryExpression(left, right) {
-    return t.binaryExpression("+", left, right);
+export default function({ types: t }) {
+  /**
+   * This function groups the objects into multiple calls to `.concat()` in
+   * order to preserve execution order of the primitive conversion, e.g.
+   *
+   *   "".concat(obj.foo, "foo", obj2.foo, "foo2")
+   *
+   * would evaluate both member expressions _first_ then, `concat` will
+   * convert each one to a primitive, whereas
+   *
+   *   "".concat(obj.foo, "foo").concat(obj2.foo, "foo2")
+   *
+   * would evaluate the member, then convert it to a primitive, then evaluate
+   * the second member and convert that one, which reflects the spec behavior
+   * of template literals.
+   */
+  function buildConcatCallExressions(items) {
+    let avail = true;
+    return items.reduce(function(left, right) {
+      let canBeInserted = t.isLiteral(right);
+
+      if (!canBeInserted && avail) {
+        canBeInserted = true;
+        avail = false;
+      }
+      if (canBeInserted && t.isCallExpression(left)) {
+        left.arguments.push(right);
+        return left;
+      }
+      return t.callExpression(
+        t.memberExpression(left, t.identifier("concat")),
+        [right],
+      );
+    });
   }
 
   return {
+    pre() {
+      this.templates = new Map();
+    },
     visitor: {
       TaggedTemplateExpression(path, state) {
         const { node } = path;
-        const quasi = node.quasi;
-        let args  = [];
+        const { quasi } = node;
 
-        let strings = [];
-        let raw     = [];
+        const strings = [];
+        const raws = [];
 
         for (const elem of (quasi.quasis: Array)) {
-          strings.push(t.stringLiteral(elem.value.cooked));
-          raw.push(t.stringLiteral(elem.value.raw));
+          const { raw, cooked } = elem.value;
+          const value =
+            cooked == null
+              ? path.scope.buildUndefinedNode()
+              : t.stringLiteral(cooked);
+
+          strings.push(value);
+          raws.push(t.stringLiteral(raw));
         }
 
-        strings = t.arrayExpression(strings);
-        raw = t.arrayExpression(raw);
+        let helperName = "taggedTemplateLiteral";
+        if (state.opts.loose) helperName += "Loose";
 
-        let templateName = "taggedTemplateLiteral";
-        if (state.opts.loose) templateName += "Loose";
+        // Generate a unique name based on the string literals so we dedupe
+        // identical strings used in the program.
+        const rawParts = raws.map(s => s.value).join(",");
+        const name = `${helperName}_${raws.length}_${rawParts}`;
 
-        const templateObject = state.file.addTemplateObject(templateName, strings, raw);
-        args.push(templateObject);
+        let templateObject = this.templates.get(name);
+        if (templateObject) {
+          templateObject = t.clone(templateObject);
+        } else {
+          const programPath = path.find(p => p.isProgram());
+          templateObject = programPath.scope.generateUidIdentifier(
+            "templateObject",
+          );
+          this.templates.set(name, templateObject);
 
-        args = args.concat(quasi.expressions);
+          const helperId = this.addHelper(helperName);
+          const init = t.callExpression(helperId, [
+            t.arrayExpression(strings),
+            t.arrayExpression(raws),
+          ]);
+          annotateAsPure(init);
+          init._compact = true;
+          programPath.scope.push({
+            id: templateObject,
+            init,
+            // This ensures that we don't fail if not using function expression helpers
+            _blockHoist: 1.9,
+          });
+        }
 
-        path.replaceWith(t.callExpression(node.tag, args));
+        path.replaceWith(
+          t.callExpression(node.tag, [templateObject, ...quasi.expressions]),
+        );
       },
 
       TemplateLiteral(path, state) {
-        let nodes: Array<Object> = [];
-
+        const nodes = [];
         const expressions = path.get("expressions");
 
+        let index = 0;
         for (const elem of (path.node.quasis: Array)) {
-          nodes.push(t.stringLiteral(elem.value.cooked));
+          if (elem.value.cooked) {
+            nodes.push(t.stringLiteral(elem.value.cooked));
+          }
 
-          const expr = expressions.shift();
-          if (expr) {
-            if (state.opts.spec && !expr.isBaseType("string") && !expr.isBaseType("number"))  {
-              nodes.push(t.callExpression(t.identifier("String"), [expr.node]));
-            } else {
-              nodes.push(expr.node);
+          if (index < expressions.length) {
+            const expr = expressions[index++];
+            const node = expr.node;
+            if (!t.isStringLiteral(node, { value: "" })) {
+              nodes.push(node);
             }
           }
         }
 
-        // filter out empty string literals
-        nodes = nodes.filter((n) => !t.isLiteral(n, { value: "" }));
-
         // since `+` is left-to-right associative
         // ensure the first node is a string if first/second isn't
-        if (!isString(nodes[0]) && !isString(nodes[1])) {
+        const considerSecondNode =
+          !state.opts.loose || !t.isStringLiteral(nodes[1]);
+        if (!t.isStringLiteral(nodes[0]) && considerSecondNode) {
           nodes.unshift(t.stringLiteral(""));
         }
+        let root = nodes[0];
 
-        if (nodes.length > 1) {
-          let root = buildBinaryExpression(nodes.shift(), nodes.shift());
-
-          for (const node of nodes) {
-            root = buildBinaryExpression(root, node);
+        if (state.opts.loose) {
+          for (let i = 1; i < nodes.length; i++) {
+            root = t.binaryExpression("+", root, nodes[i]);
           }
-
-          path.replaceWith(root);
-        } else {
-          path.replaceWith(nodes[0]);
+        } else if (nodes.length > 1) {
+          root = buildConcatCallExressions(nodes);
         }
-      }
-    }
+
+        path.replaceWith(root);
+      },
+    },
   };
 }

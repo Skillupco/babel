@@ -3,6 +3,10 @@
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
-var state = exports.state = function state(_state) {
+exports.state = void 0;
+
+var state = function state(_state) {
   return _state.a;
 };
+
+exports.state = state;

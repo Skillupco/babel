@@ -1,11 +1,11 @@
-'use strict';
+var C =
+/*#__PURE__*/
+function () {
+  function C() {}
 
-var C = function () {
-  function C() {
-    babelHelpers.classCallCheck(this, C);
-  }
+  var _proto = C.prototype;
 
-  C.prototype.m = function m(x) {
+  _proto.m = function m(x) {
     return 'a';
   };
 

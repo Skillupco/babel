@@ -1,16 +1,16 @@
 var BaseView = function BaseView() {
   babelHelpers.classCallCheck(this, BaseView);
-
   this.autoRender = true;
 };
 
 var BaseView = function BaseView() {
   babelHelpers.classCallCheck(this, BaseView);
-
   this.autoRender = true;
 };
 
-var BaseView = function () {
+var BaseView =
+/*#__PURE__*/
+function () {
   function BaseView() {
     babelHelpers.classCallCheck(this, BaseView);
   }

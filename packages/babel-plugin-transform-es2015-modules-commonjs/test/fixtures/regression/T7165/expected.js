@@ -1,10 +1,12 @@
-'use strict';
+"use strict";
 
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
 
-var _bar = require('bar');
+var _foo = _interopRequireDefault(require("foo"));
+
+var _bar = require("bar");
 
 Object.keys(_bar).forEach(function (key) {
   if (key === "default" || key === "__esModule") return;
@@ -15,10 +17,6 @@ Object.keys(_bar).forEach(function (key) {
     }
   });
 });
-
-var _foo = require('foo');
-
-var _foo2 = _interopRequireDefault(_foo);
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 

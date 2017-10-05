@@ -42,7 +42,7 @@ const visitor = {
 
     state.selfReference = true;
     path.stop();
-  }
+  },
 };
 
 function wrap(state, method, id, scope) {
@@ -56,13 +56,14 @@ function wrap(state, method, id, scope) {
 
       // need to add a wrapper since we can't change the references
       let build = buildPropertyMethodAssignmentWrapper;
-      if (method.generator) build = buildGeneratorPropertyMethodAssignmentWrapper;
+      if (method.generator) {
+        build = buildGeneratorPropertyMethodAssignmentWrapper;
+      }
       const template = build({
         FUNCTION: method,
         FUNCTION_ID: id,
-        FUNCTION_KEY: scope.generateUidIdentifier(id.name)
+        FUNCTION_KEY: scope.generateUidIdentifier(id.name),
       }).expression;
-      template.callee._skipModulesRemap = true;
 
       // shim in dummy params to retain function arity, if you try to read the
       // source then you'll get the original since it's proxied so it's all good
@@ -82,10 +83,10 @@ function wrap(state, method, id, scope) {
 function visit(node, name, scope) {
   const state = {
     selfAssignment: false,
-    selfReference:  false,
-    outerDeclar:    scope.getBindingIdentifier(name),
-    references:     [],
-    name:           name
+    selfReference: false,
+    outerDeclar: scope.getBindingIdentifier(name),
+    references: [],
+    name: name,
   };
 
   // check to see if we have a local binding of the id we're setting inside of
@@ -125,12 +126,15 @@ function visit(node, name, scope) {
   return state;
 }
 
-export default function ({ node, parent, scope, id }) {
+export default function({ node, parent, scope, id }) {
   // has an `id` so we don't need to infer one
   if (node.id) return;
 
-  if ((t.isObjectProperty(parent) || t.isObjectMethod(parent, { kind: "method" })) &&
-    (!parent.computed || t.isLiteral(parent.key))) {
+  if (
+    (t.isObjectProperty(parent) ||
+      t.isObjectMethod(parent, { kind: "method" })) &&
+    (!parent.computed || t.isLiteral(parent.key))
+  ) {
     // { foo() {} };
     id = parent.key;
   } else if (t.isVariableDeclarator(parent)) {
@@ -139,7 +143,11 @@ export default function ({ node, parent, scope, id }) {
 
     if (t.isIdentifier(id)) {
       const binding = scope.parent.getBinding(id.name);
-      if (binding && binding.constant && scope.getBinding(id.name) === binding) {
+      if (
+        binding &&
+        binding.constant &&
+        scope.getBinding(id.name) === binding
+      ) {
         // always going to reference this method
         node.id = id;
         node.id[t.NOT_LOCAL_BINDING] = true;

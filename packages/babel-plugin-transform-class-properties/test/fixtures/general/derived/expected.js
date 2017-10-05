@@ -1,11 +1,18 @@
-var Foo = function (_Bar) {
+var Foo =
+/*#__PURE__*/
+function (_Bar) {
   babelHelpers.inherits(Foo, _Bar);
 
   function Foo(...args) {
-    var _temp, _this, _ret;
+    var _temp, _this;
 
     babelHelpers.classCallCheck(this, Foo);
-    return _ret = (_temp = (_this = babelHelpers.possibleConstructorReturn(this, (Foo.__proto__ || Object.getPrototypeOf(Foo)).call(this, ...args)), _this), _this.bar = "foo", _temp), babelHelpers.possibleConstructorReturn(_this, _ret);
+    return babelHelpers.possibleConstructorReturn(_this, (_temp = _this = babelHelpers.possibleConstructorReturn(this, (Foo.__proto__ || Object.getPrototypeOf(Foo)).call(this, ...args)), Object.defineProperty(_this, "bar", {
+      configurable: true,
+      enumerable: true,
+      writable: true,
+      value: "foo"
+    }), _temp));
   }
 
   return Foo;

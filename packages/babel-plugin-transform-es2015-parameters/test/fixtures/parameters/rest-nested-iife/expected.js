@@ -1,6 +1,8 @@
 function broken(x) {
   if (true) {
-    var Foo = function (_Bar) {
+    var Foo =
+    /*#__PURE__*/
+    function (_Bar) {
       babelHelpers.inherits(Foo, _Bar);
 
       function Foo() {
@@ -11,10 +13,10 @@ function broken(x) {
       return Foo;
     }(Bar);
 
-    for (var _len = arguments.length, foo = Array(_len > 1 ? _len - 1 : 0), _key = 1; _key < _len; _key++) {
+    for (var _len = arguments.length, foo = new Array(_len > 1 ? _len - 1 : 0), _key = 1; _key < _len; _key++) {
       foo[_key - 1] = arguments[_key];
     }
 
-    return hello.apply(undefined, foo);
+    return hello.apply(void 0, foo);
   }
 }

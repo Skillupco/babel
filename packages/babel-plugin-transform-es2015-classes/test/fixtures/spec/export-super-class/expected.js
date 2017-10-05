@@ -1,4 +1,6 @@
-var _class = function (_A) {
+var _class =
+/*#__PURE__*/
+function (_A) {
   babelHelpers.inherits(_class, _A);
 
   function _class() {
@@ -9,4 +11,4 @@ var _class = function (_A) {
   return _class;
 }(A);
 
-export default _class;
+export { _class as default };

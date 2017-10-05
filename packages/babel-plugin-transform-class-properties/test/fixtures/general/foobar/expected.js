@@ -1,19 +1,23 @@
-"use strict";
+var Child =
+/*#__PURE__*/
+function (_Parent) {
+  babelHelpers.inherits(Child, _Parent);
 
-var Child = function (_Parent) {
-    babelHelpers.inherits(Child, _Parent);
+  function Child() {
+    var _this;
 
-    function Child() {
-        babelHelpers.classCallCheck(this, Child);
+    babelHelpers.classCallCheck(this, Child);
+    _this = babelHelpers.possibleConstructorReturn(this, (Child.__proto__ || Object.getPrototypeOf(Child)).call(this));
+    Object.defineProperty(_this, "scopedFunctionWithThis", {
+      configurable: true,
+      enumerable: true,
+      writable: true,
+      value: function value() {
+        _this.name = {};
+      }
+    });
+    return _this;
+  }
 
-        var _this = babelHelpers.possibleConstructorReturn(this, (Child.__proto__ || Object.getPrototypeOf(Child)).call(this));
-
-        _this.scopedFunctionWithThis = function () {
-            _this.name = {};
-        };
-
-        return _this;
-    }
-
-    return Child;
+  return Child;
 }(Parent);

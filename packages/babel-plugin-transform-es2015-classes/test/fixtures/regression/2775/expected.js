@@ -1,14 +1,15 @@
-'use strict';
+"use strict";
 
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
+exports.default = void 0;
 
-var _react = require('react');
+var _react = babelHelpers.interopRequireWildcard(require("react"));
 
-var _react2 = babelHelpers.interopRequireDefault(_react);
-
-var RandomComponent = function (_Component) {
+var RandomComponent =
+/*#__PURE__*/
+function (_Component) {
   babelHelpers.inherits(RandomComponent, _Component);
 
   function RandomComponent() {
@@ -17,17 +18,11 @@ var RandomComponent = function (_Component) {
   }
 
   babelHelpers.createClass(RandomComponent, [{
-    key: 'render',
+    key: "render",
     value: function render() {
-      return _react2.default.createElement(
-        'div',
-        { className: 'sui-RandomComponent' },
-        _react2.default.createElement(
-          'h2',
-          null,
-          'Hi there!'
-        )
-      );
+      return _react.default.createElement("div", {
+        className: "sui-RandomComponent"
+      }, _react.default.createElement("h2", null, "Hi there!"));
     }
   }]);
   return RandomComponent;

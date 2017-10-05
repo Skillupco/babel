@@ -1,4 +1,10 @@
-import defineType, { assertNodeType } from "./index";
+import defineType, {
+  assertEach,
+  assertNodeType,
+  assertValueType,
+  chain,
+} from "./index";
+import { classMethodOrPropertyCommon } from "./es2015";
 
 defineType("AwaitExpression", {
   builder: ["argument"],
@@ -7,24 +13,8 @@ defineType("AwaitExpression", {
   fields: {
     argument: {
       validate: assertNodeType("Expression"),
-    }
-  }
-});
-
-defineType("ForAwaitStatement", {
-  visitor: ["left", "right", "body"],
-  aliases: ["Scopable", "Statement", "For", "BlockParent", "Loop", "ForXStatement"],
-  fields: {
-    left: {
-      validate: assertNodeType("VariableDeclaration", "LVal")
     },
-    right: {
-      validate: assertNodeType("Expression")
-    },
-    body: {
-      validate: assertNodeType("Statement")
-    }
-  }
+  },
 });
 
 defineType("BindExpression", {
@@ -32,20 +22,48 @@ defineType("BindExpression", {
   aliases: ["Expression"],
   fields: {
     // todo
-  }
+  },
+});
+
+defineType("ClassProperty", {
+  visitor: ["key", "value", "typeAnnotation", "decorators"],
+  builder: ["key", "value", "typeAnnotation", "decorators", "computed"],
+  aliases: ["Property"],
+  fields: {
+    ...classMethodOrPropertyCommon,
+    value: {
+      validate: assertNodeType("Expression"),
+      optional: true,
+    },
+    typeAnnotation: {
+      validate: assertNodeType("TypeAnnotation", "TSTypeAnnotation", "Noop"),
+      optional: true,
+    },
+    decorators: {
+      validate: chain(
+        assertValueType("array"),
+        assertEach(assertNodeType("Decorator")),
+      ),
+      optional: true,
+    },
+    readonly: {
+      validate: assertValueType("boolean"),
+      optional: true,
+    },
+  },
 });
 
 defineType("Import", {
-  aliases: ["Expression"]
+  aliases: ["Expression"],
 });
 
 defineType("Decorator", {
   visitor: ["expression"],
   fields: {
     expression: {
-      validate: assertNodeType("Expression")
-    }
-  }
+      validate: assertNodeType("Expression"),
+    },
+  },
 });
 
 defineType("DoExpression", {
@@ -53,9 +71,9 @@ defineType("DoExpression", {
   aliases: ["Expression"],
   fields: {
     body: {
-      validate: assertNodeType("BlockStatement")
-    }
-  }
+      validate: assertNodeType("BlockStatement"),
+    },
+  },
 });
 
 defineType("ExportDefaultSpecifier", {
@@ -63,9 +81,9 @@ defineType("ExportDefaultSpecifier", {
   aliases: ["ModuleSpecifier"],
   fields: {
     exported: {
-      validate: assertNodeType("Identifier")
-    }
-  }
+      validate: assertNodeType("Identifier"),
+    },
+  },
 });
 
 defineType("ExportNamespaceSpecifier", {
@@ -73,27 +91,7 @@ defineType("ExportNamespaceSpecifier", {
   aliases: ["ModuleSpecifier"],
   fields: {
     exported: {
-      validate: assertNodeType("Identifier")
-    }
-  }
-});
-
-defineType("RestProperty", {
-  visitor: ["argument"],
-  aliases: ["UnaryLike"],
-  fields: {
-    argument: {
-      validate: assertNodeType("LVal")
-    }
-  }
-});
-
-defineType("SpreadProperty", {
-  visitor: ["argument"],
-  aliases: ["UnaryLike"],
-  fields: {
-    argument: {
-      validate: assertNodeType("Expression")
-    }
-  }
+      validate: assertNodeType("Identifier"),
+    },
+  },
 });

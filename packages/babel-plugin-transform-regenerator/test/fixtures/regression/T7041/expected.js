@@ -1,21 +1,15 @@
-"use strict";
+var _regeneratorRuntime = require("babel-runtime/regenerator");
 
-var _regenerator = require("babel-runtime/regenerator");
+var _Object$keys = require("babel-runtime/core-js/object/keys");
 
-var _regenerator2 = _interopRequireDefault(_regenerator);
+var _marked =
+/*#__PURE__*/
+_regeneratorRuntime.mark(fn);
 
-var _keys = require("babel-runtime/core-js/object/keys");
-
-var _keys2 = _interopRequireDefault(_keys);
-
-function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
-
-var _marked = [fn].map(_regenerator2.default.mark);
-
-(0, _keys2.default)({});
+_Object$keys({});
 
 function fn() {
-  return _regenerator2.default.wrap(function fn$(_context) {
+  return _regeneratorRuntime.wrap(function fn$(_context) {
     while (1) {
       switch (_context.prev = _context.next) {
         case 0:
@@ -23,5 +17,5 @@ function fn() {
           return _context.stop();
       }
     }
-  }, _marked[0], this);
+  }, _marked, this);
 }

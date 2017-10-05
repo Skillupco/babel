@@ -1,4 +1,5 @@
-import { coroutine as _coroutine } from "bluebird";
+var _coroutine = require("bluebird").coroutine;
+
 _coroutine(function* () {
   yield foo();
 })();

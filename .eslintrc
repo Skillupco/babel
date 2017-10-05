@@ -1,6 +1,11 @@
 {
   "extends": "babel",
+  "plugins": [
+    "prettier"
+  ],
   "rules": {
+    "curly": ["error", "multi-line"],
+    "prettier/prettier": ["error", { "trailingComma": "es5" }]
   },
   "env": {
     "node": true,

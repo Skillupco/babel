@@ -82,7 +82,7 @@ Object.defineProperty(exports, "__esModule", {
 });
 ```
 
-In environments that don't support this you can enable loose mode on `babel-plugin-transform-es20150-modules-commonjs`
+In environments that don't support this you can enable loose mode on `babel-plugin-transform-es2015-modules-commonjs`
 and instead of using `Object.defineProperty` an assignment will be used instead.
 
 ```javascript
@@ -120,9 +120,7 @@ export or if it _contains_ the default export.
 ```javascript
 "use strict";
 
-var _foo = require("foo");
-
-var _foo2 = _interopRequireDefault(_foo);
+var _foo = _interopRequireDefault(require("foo"));
 
 function _interopRequireDefault(obj) {
   return obj && obj.__esModule ? obj : { default: obj };

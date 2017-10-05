@@ -18,8 +18,13 @@ const referenceVisitor = {
     if (path.node.name === "this") {
       let scope = path.scope;
       do {
-        if (scope.path.isFunction() && !scope.path.isArrowFunctionExpression()) break;
-      } while (scope = scope.parent);
+        if (
+          scope.path.isFunction() &&
+          !scope.path.isArrowFunctionExpression()
+        ) {
+          break;
+        }
+      } while ((scope = scope.parent));
       if (scope) state.breakOnScopePaths.push(scope.path);
     }
 
@@ -32,7 +37,7 @@ const referenceVisitor = {
     if (binding !== state.scope.getBinding(path.node.name)) return;
 
     state.bindings[path.node.name] = binding;
-  }
+  },
 };
 
 export default class PathHoister {
@@ -40,15 +45,15 @@ export default class PathHoister {
     // Storage for scopes we can't hoist above.
     this.breakOnScopePaths = [];
     // Storage for bindings that may affect what path we can hoist to.
-    this.bindings          = {};
+    this.bindings = {};
     // Storage for eligible scopes.
-    this.scopes            = [];
+    this.scopes = [];
     // Our original scope and path.
-    this.scope             = scope;
-    this.path              = path;
+    this.scope = scope;
+    this.path = path;
     // By default, we attach as far up as we can; but if we're trying
     // to avoid referencing a binding, we may have to go after.
-    this.attachAfter       = false;
+    this.attachAfter = false;
   }
 
   // A scope is compatible if all required bindings are reachable.
@@ -77,7 +82,7 @@ export default class PathHoister {
       if (this.breakOnScopePaths.indexOf(scope.path) >= 0) {
         break;
       }
-    } while (scope = scope.parent);
+    } while ((scope = scope.parent));
   }
 
   getAttachmentPath() {
@@ -99,11 +104,17 @@ export default class PathHoister {
 
         const binding = this.bindings[name];
 
-        // allow parameter references
-        if (binding.kind === "param") continue;
+        // allow parameter references and expressions in params (like destructuring rest)
+        if (binding.kind === "param" || binding.path.parentKey === "params") {
+          continue;
+        }
 
-        // if this binding appears after our attachment point, then we move after it.
-        if (this.getAttachmentParentForPath(binding.path).key > path.key) {
+        // For each binding, get its attachment parent. This gives us an idea of where we might
+        // introduce conflicts.
+        const bindingParentPath = this.getAttachmentParentForPath(binding.path);
+
+        // If the binding's attachment appears at or after our attachment point, then we move after it.
+        if (bindingParentPath.key >= path.key) {
           this.attachAfter = true;
           path = binding.path;
 
@@ -115,6 +126,12 @@ export default class PathHoister {
           }
         }
       }
+    }
+
+    // We can't insert before/after a child of an export declaration, so move up
+    // to the declaration itself.
+    if (path.parentPath.isExportDeclaration()) {
+      path = path.parentPath;
     }
 
     return path;
@@ -133,7 +150,14 @@ export default class PathHoister {
         if (this.scope === scope) return;
 
         // needs to be attached to the body
-        return scope.path.get("body").get("body")[0];
+        const bodies = scope.path.get("body").get("body");
+        for (let i = 0; i < bodies.length; i++) {
+          // Don't attach to something that's going to get hoisted,
+          // like a default parameter
+          if (bodies[i].node._blockHoist) continue;
+          return bodies[i];
+        }
+        // deopt: If here, no attachment path found
       } else {
         // doesn't need to be be attached to this scope
         return this.getNextScopeAttachmentParent();
@@ -155,12 +179,10 @@ export default class PathHoister {
         // Beginning of the scope
         !path.parentPath ||
         // Has siblings and is a statement
-        (Array.isArray(path.container) && path.isStatement()) ||
-        // Is part of multiple var declarations
-        (path.isVariableDeclarator() &&
-          path.parentPath.node !== null &&
-          path.parentPath.node.declarations.length > 1))
+        (Array.isArray(path.container) && path.isStatement())
+      ) {
         return path;
+      }
     } while ((path = path.parentPath));
   }
 
@@ -177,10 +199,6 @@ export default class PathHoister {
   }
 
   run() {
-    const node = this.path.node;
-    if (node._hoisted) return;
-    node._hoisted = true;
-
     this.path.traverse(referenceVisitor, this);
 
     this.getCompatibleScopes();
@@ -198,7 +216,9 @@ export default class PathHoister {
 
     const insertFn = this.attachAfter ? "insertAfter" : "insertBefore";
     attachTo[insertFn]([
-      attachTo.isVariableDeclarator() ? declarator : t.variableDeclaration("var", [declarator])
+      attachTo.isVariableDeclarator()
+        ? declarator
+        : t.variableDeclaration("var", [declarator]),
     ]);
 
     const parent = this.path.parentPath;
