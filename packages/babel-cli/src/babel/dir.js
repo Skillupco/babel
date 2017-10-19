@@ -3,6 +3,8 @@ import outputFileSync from "output-file-sync";
 import slash from "slash";
 import path from "path";
 import fs from "fs";
+import anymatch from "anymatch";
+import isGlob from "is-glob";
 
 import * as util from "./util";
 
@@ -55,6 +57,7 @@ export default function(commander, filenames, opts) {
 
     if (!didWrite && commander.copyFiles) {
       const dest = getDest(commander, filename, base);
+
       outputFileSync(dest, fs.readFileSync(src));
       util.chmod(src, dest);
     }
@@ -75,6 +78,13 @@ export default function(commander, filenames, opts) {
       util
         .readdir(dirname, commander.includeDotfiles)
         .forEach(function(filename) {
+          const ignoreMatchs =
+            opts.ignore &&
+            opts.ignore.map(path => {
+              return isGlob(path) ? path : `${path}/**`;
+            });
+          if (opts.ignore && anymatch(ignoreMatchs, filename)) return;
+
           const src = path.join(dirname, filename);
           handleFile(src, filename, dirname);
         });
