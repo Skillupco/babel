@@ -11,15 +11,16 @@
   },
   "devDependencies": {
     "async": "^1.5.0",
-    "babel-cli": "7.0.0-beta.2",
-    "babel-core": "7.0.0-beta.2",
+    "babel-cli": "7.0.0-beta.3",
+    "babel-core": "7.0.0-beta.3",
     "babel-eslint": "8.0.0-alpha.15",
+    "babel-loader": "7.1.1",
     "babel-plugin-istanbul": "^4.1.4",
-    "babel-preset-env": "2.0.0-beta.2",
-    "babel-preset-flow": "7.0.0-beta.2",
-    "babel-preset-stage-0": "7.0.0-beta.2",
-    "babel-register": "7.0.0-beta.2",
-    "babylon": "7.0.0-beta.27",
+    "babel-preset-env": "7.0.0-beta.3",
+    "babel-preset-flow": "7.0.0-beta.3",
+    "babel-preset-stage-0": "7.0.0-beta.3",
+    "babel-register": "7.0.0-beta.3",
+    "babylon": "7.0.0-beta.29",
     "browserify": "^13.1.1",
     "bundle-collapser": "^1.2.1",
     "chai": "^4.1.0",
@@ -34,6 +35,8 @@
     "gulp-babel": "^7.0.0",
     "gulp-newer": "^1.0.0",
     "gulp-plumber": "^1.0.1",
+    "gulp-rename": "^1.2.2",
+    "gulp-uglify": "^3.0.0",
     "gulp-util": "^3.0.7",
     "gulp-watch": "^4.3.5",
     "husky": "^0.14.3",
@@ -46,10 +49,14 @@
     "nyc": "^11.0.3",
     "output-file-sync": "^2.0.0",
     "prettier": "1.7.3",
+    "pump": "^1.0.2",
     "rimraf": "^2.4.3",
     "semver": "^5.0.0",
     "through2": "^2.0.0",
-    "uglify-js": "^2.4.16"
+    "uglify-js": "^2.4.16",
+    "webpack": "^3.4.1",
+    "webpack-dependency-suite": "^2.4.4",
+    "webpack-stream": "^4.0.0"
   },
   "engines": {
     "node": ">= 4.x <= 8.x",
@@ -61,14 +68,16 @@
     "exclude": [
       "scripts/*.js",
       "packages/*/test/**",
-      "packages/babel-standalone/**"
+      "packages/babel-standalone/**",
+      "codemods/*/test/**",
+      "experimental/*/test/**"
     ],
     "sourceMap": false,
     "instrument": false
   },
   "lint-staged": {
     "*.js": [
-      "eslint --format=codeframe --rulesdir='./eslint_rules'"
+      "eslint --format=codeframe --rulesdir='./scripts/eslint_rules'"
     ]
   }
 }

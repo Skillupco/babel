@@ -1,8 +1,8 @@
 /* @noflow */
 
-import type { NodePath } from "babel-traverse";
-import wrapFunction from "babel-helper-wrap-function";
-import * as t from "babel-types";
+import type { NodePath } from "@babel/traverse";
+import wrapFunction from "@babel/helper-wrap-function";
+import * as t from "@babel/types";
 import rewriteForAwait from "./for-await";
 
 const awaitVisitor = {
@@ -52,11 +52,6 @@ const awaitVisitor = {
 };
 
 export default function(path: NodePath, file: Object, helpers: Object) {
-  if (!helpers) {
-    // bc for 6.15 and earlier
-    helpers = { wrapAsync: file };
-    file = null;
-  }
   path.traverse(awaitVisitor, {
     file,
     wrapAwait: helpers.wrapAwait,

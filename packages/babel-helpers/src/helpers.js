@@ -1,13 +1,13 @@
 /* eslint max-len: "off" */
 
-import template from "babel-template";
+import template from "@babel/template";
 
 const helpers = {};
 export default helpers;
 
-function defineHelper(str) {
-  return template(str, { sourceType: "module" });
-}
+// Helpers never include placeholders, so we disable placeholder pattern
+// matching to allow us to use pattern-like variable names.
+const defineHelper = template.program({ placeholderPattern: false });
 
 helpers.typeof = defineHelper(`
   export default function _typeof(obj) {
@@ -600,7 +600,9 @@ helpers.taggedTemplateLiteralLoose = defineHelper(`
 `);
 
 helpers.temporalRef = defineHelper(`
-  export default function _temporalRef(val, name, undef) {
+  import undef from "temporalUndefined";
+
+  export default function _temporalRef(val, name) {
     if (val === undef) {
       throw new ReferenceError(name + " is not defined - temporal dead zone");
     } else {
