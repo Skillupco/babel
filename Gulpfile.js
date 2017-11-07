@@ -10,6 +10,7 @@ const newer = require("gulp-newer");
 const babel = require("gulp-babel");
 const watch = require("gulp-watch");
 const gutil = require("gulp-util");
+const filter = require("gulp-filter");
 const gulp = require("gulp");
 const path = require("path");
 const merge = require("merge-stream");
@@ -36,9 +37,11 @@ gulp.task("build", function() {
   return merge(
     sources.map(source => {
       const base = path.join(__dirname, source);
+      const f = filter(["**", "!**/packages/babylon/**"]);
 
       return gulp
         .src(getGlobFromSource(source), { base: base })
+        .pipe(f)
         .pipe(
           plumber({
             errorHandler: function(err) {
@@ -113,7 +116,15 @@ function webpackBuild() {
             // their project.json (or a ".babelrc" file). We need to ignore
             // those as we're using our own Babel options.
             babelrc: false,
-            presets: ["env"],
+            presets: [
+              [
+                "@babel/env",
+                {
+                  loose: true,
+                  exclude: ["transform-typeof-symbol"],
+                },
+              ],
+            ],
           },
         },
         {
@@ -125,10 +136,21 @@ function webpackBuild() {
             // their project.json (or a ".babelrc" file). We need to ignore
             // those as we're using our own Babel options.
             babelrc: false,
-            presets: ["env", "stage-0"],
+            presets: [
+              [
+                "@babel/env",
+                {
+                  loose: true,
+                  exclude: ["transform-typeof-symbol"],
+                },
+              ],
+              ["@babel/stage-0", { loose: true }],
+            ],
           },
         },
       ],
+      // babylon is already bundled and does not require parsing
+      noParse: [/babylon\/lib/],
     },
     node: {
       // Mock Node.js modules that Babel require()s but that we don't
