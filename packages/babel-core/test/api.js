@@ -118,26 +118,33 @@ describe("api", function() {
   });
 
   it("transformFile", function(done) {
-    babel.transformFile(
-      __dirname + "/fixtures/api/file.js",
-      {
-        babelrc: false,
-      },
-      function(err, res) {
-        if (err) return done(err);
-        assert.equal(res.code, "foo();");
-        done();
-      },
-    );
+    const options = {
+      babelrc: false,
+    };
+    Object.freeze(options);
+    babel.transformFile(__dirname + "/fixtures/api/file.js", options, function(
+      err,
+      res,
+    ) {
+      if (err) return done(err);
+      assert.equal(res.code, "foo();");
+      // keep user options untouched
+      assert.deepEqual(options, { babelrc: false });
+      done();
+    });
   });
 
   it("transformFileSync", function() {
+    const options = {
+      babelrc: false,
+    };
+    Object.freeze(options);
     assert.equal(
-      babel.transformFileSync(__dirname + "/fixtures/api/file.js", {
-        babelrc: false,
-      }).code,
+      babel.transformFileSync(__dirname + "/fixtures/api/file.js", options)
+        .code,
       "foo();",
     );
+    assert.deepEqual(options, { babelrc: false });
   });
 
   it("options throw on falsy true", function() {
@@ -296,12 +303,6 @@ describe("api", function() {
         development: {
           passPerPreset: true,
           presets: [pushPreset("argthree"), pushPreset("argfour")],
-          env: {
-            development: {
-              passPerPreset: true,
-              presets: [pushPreset("argfive"), pushPreset("argsix")],
-            },
-          },
         },
       },
     });
@@ -309,32 +310,30 @@ describe("api", function() {
     assert.equal(
       result.code,
       [
-        "argtwo;",
-        "argone;",
-        "eleven;",
-        "twelve;",
+        "thirteen;",
+        "fourteen;",
+        "seventeen;",
+        "eighteen;",
         "one;",
         "two;",
+        "eleven;",
+        "twelve;",
+        "argtwo;",
+        "argone;",
         "five;",
         "six;",
         "three;",
         "four;",
-        "seventeen;",
-        "eighteen;",
         "nineteen;",
         "twenty;",
-        "thirteen;",
-        "fourteen;",
         "fifteen;",
         "sixteen;",
-        "argfive;",
-        "argsix;",
-        "argthree;",
-        "argfour;",
         "seven;",
         "eight;",
         "nine;",
         "ten;",
+        "argthree;",
+        "argfour;",
       ].join("\n"),
     );
   });

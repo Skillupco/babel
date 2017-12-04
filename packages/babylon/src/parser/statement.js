@@ -129,12 +129,10 @@ export default class StatementParser extends ExpressionParser {
         return this.parseEmptyStatement(node);
       case tt._export:
       case tt._import: {
-        if (
-          (this.hasPlugin("dynamicImport") &&
-            this.lookahead().type === tt.parenL) ||
-          (this.hasPlugin("importMeta") && this.lookahead().type === tt.dot)
-        )
+        const nextToken = this.lookahead();
+        if (nextToken.type === tt.parenL || nextToken.type === tt.dot) {
           break;
+        }
 
         if (!this.options.allowImportExportEverywhere && !topLevel) {
           this.raise(
@@ -305,8 +303,9 @@ export default class StatementParser extends ExpressionParser {
         if (node.label && isBreak) break;
       }
     }
-    if (i === this.state.labels.length)
+    if (i === this.state.labels.length) {
       this.raise(node.start, "Unsyntactic " + keyword);
+    }
     return this.finishNode(
       node,
       isBreak ? "BreakStatement" : "ContinueStatement",
@@ -449,8 +448,9 @@ export default class StatementParser extends ExpressionParser {
         if (isCase) {
           cur.test = this.parseExpression();
         } else {
-          if (sawDefault)
+          if (sawDefault) {
             this.raise(this.state.lastTokStart, "Multiple default clauses");
+          }
           sawDefault = true;
           cur.test = null;
         }
@@ -473,8 +473,9 @@ export default class StatementParser extends ExpressionParser {
     this.next();
     if (
       lineBreak.test(this.input.slice(this.state.lastTokEnd, this.state.start))
-    )
+    ) {
       this.raise(this.state.lastTokEnd, "Illegal newline after throw");
+    }
     node.argument = this.parseExpression();
     this.semicolon();
     return this.finishNode(node, "ThrowStatement");
@@ -533,8 +534,9 @@ export default class StatementParser extends ExpressionParser {
   }
 
   parseWithStatement(node: N.WithStatement): N.WithStatement {
-    if (this.state.strict)
+    if (this.state.strict) {
       this.raise(this.state.start, "'with' in strict mode");
+    }
     this.next();
     node.object = this.parseParenExpression();
     node.body = this.parseStatement(false);
@@ -1305,12 +1307,10 @@ export default class StatementParser extends ExpressionParser {
   parseExport(node: N.Node): N.Node {
     // export * from '...'
     if (this.shouldParseExportStar()) {
-      this.parseExportStar(node, this.hasPlugin("exportExtensions"));
+      this.parseExportStar(node);
       if (node.type === "ExportAllDeclaration") return node;
-    } else if (
-      this.hasPlugin("exportExtensions") &&
-      this.isExportDefaultSpecifier()
-    ) {
+    } else if (this.isExportDefaultSpecifier()) {
+      this.expectPlugin("exportDefaultFrom");
       const specifier = this.startNode();
       specifier.exported = this.parseIdentifier(true);
       const specifiers = [this.finishNode(specifier, "ExportDefaultSpecifier")];
@@ -1356,7 +1356,7 @@ export default class StatementParser extends ExpressionParser {
 
         // export async;
         if (next.type !== tt._function) {
-          this.unexpected(next.start, "Unexpected token, expected function");
+          this.unexpected(next.start, `Unexpected token, expected "function"`);
         }
       }
 
@@ -1421,25 +1421,33 @@ export default class StatementParser extends ExpressionParser {
     return this.match(tt.star);
   }
 
-  parseExportStar(node: N.ExportNamedDeclaration, allowNamed: boolean): void {
+  parseExportStar(node: N.ExportNamedDeclaration): void {
     this.expect(tt.star);
 
-    if (allowNamed && this.isContextual("as")) {
-      const specifier = this.startNodeAt(
-        this.state.lastTokStart,
-        this.state.lastTokStartLoc,
-      );
-      this.next();
-      specifier.exported = this.parseIdentifier(true);
-      node.specifiers = [
-        this.finishNode(specifier, "ExportNamespaceSpecifier"),
-      ];
-      this.parseExportSpecifiersMaybe(node);
-      this.parseExportFrom(node, true);
+    if (this.isContextual("as")) {
+      this.parseExportNamespace(node);
     } else {
       this.parseExportFrom(node, true);
       this.finishNode(node, "ExportAllDeclaration");
     }
+  }
+
+  parseExportNamespace(node: N.ExportNamedDeclaration): void {
+    this.expectPlugin("exportNamespaceFrom");
+
+    const specifier = this.startNodeAt(
+      this.state.lastTokStart,
+      this.state.lastTokStartLoc,
+    );
+
+    this.next();
+
+    specifier.exported = this.parseIdentifier(true);
+
+    node.specifiers = [this.finishNode(specifier, "ExportNamespaceSpecifier")];
+
+    this.parseExportSpecifiersMaybe(node);
+    this.parseExportFrom(node, true);
   }
 
   shouldParseExportDeclaration(): boolean {
@@ -1502,10 +1510,9 @@ export default class StatementParser extends ExpressionParser {
     }
   }
 
-  checkDeclaration(node: N.Pattern): void {
+  checkDeclaration(node: N.Pattern | N.ObjectProperty): void {
     if (node.type === "ObjectPattern") {
       for (const prop of node.properties) {
-        // $FlowFixMe (prop may be an AssignmentProperty, in which case this does nothing?)
         this.checkDeclaration(prop);
       }
     } else if (node.type === "ArrayPattern") {

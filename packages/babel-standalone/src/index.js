@@ -137,6 +137,8 @@ export function registerPresets(newPresets) {
 }
 
 // All the plugins we should bundle
+// Want to get rid of this long whitelist of plugins?
+// Wait! Please read https://github.com/babel/babel/pull/6177 first.
 registerPlugins({
   "check-constants": require("@babel/plugin-check-constants"),
   "external-helpers": require("@babel/plugin-external-helpers"),
@@ -145,7 +147,8 @@ registerPlugins({
   "syntax-decorators": require("@babel/plugin-syntax-decorators"),
   "syntax-do-expressions": require("@babel/plugin-syntax-do-expressions"),
   "syntax-dynamic-import": require("@babel/plugin-syntax-dynamic-import"),
-  "syntax-export-extensions": require("@babel/plugin-syntax-export-extensions"),
+  "syntax-export-default-from": require("@babel/plugin-syntax-export-default-from"),
+  "syntax-export-namespace-from": require("@babel/plugin-syntax-export-namespace-from"),
   "syntax-flow": require("@babel/plugin-syntax-flow"),
   "syntax-function-bind": require("@babel/plugin-syntax-function-bind"),
   "syntax-function-sent": require("@babel/plugin-syntax-function-sent"),
@@ -156,6 +159,8 @@ registerPlugins({
   "proposal-class-properties": require("@babel/plugin-proposal-class-properties"),
   "proposal-decorators": require("@babel/plugin-proposal-decorators"),
   "proposal-do-expressions": require("@babel/plugin-proposal-do-expressions"),
+  "proposal-export-default-from": require("@babel/plugin-proposal-export-default-from"),
+  "proposal-export-namespace-from": require("@babel/plugin-proposal-export-namespace-from"),
   "transform-arrow-functions": require("@babel/plugin-transform-arrow-functions"),
   "transform-block-scoped-functions": require("@babel/plugin-transform-block-scoped-functions"),
   "transform-block-scoping": require("@babel/plugin-transform-block-scoping"),
@@ -208,6 +213,8 @@ registerPlugins({
 });
 
 // All the presets we should bundle
+// Want to get rid of this whitelist of presets?
+// Wait! Please read https://github.com/babel/babel/pull/6177 first.
 registerPresets({
   es2015: require("@babel/preset-es2015"),
   es2016: require("@babel/preset-es2016"),

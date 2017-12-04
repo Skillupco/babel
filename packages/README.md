@@ -14,14 +14,14 @@ A monorepo, muhahahahahaha. See the [monorepo design doc](/doc/design/monorepo.m
 | Package | Version | Dependencies |
 |--------|-------|------------|
 | [`@babel/core`](/packages/babel-core) | [![npm](https://img.shields.io/npm/v/babel-core.svg?maxAge=2592000)](https://www.npmjs.com/package/babel-core) | [![Dependency Status](https://david-dm.org/babel/babel.svg?path=packages/babel-core)](https://david-dm.org/babel/babel?path=packages/babel-core) |
-| [`babylon`](https://github.com/babel/babylon) | [![npm](https://img.shields.io/npm/v/babylon.svg?maxAge=2592000)](https://www.npmjs.com/package/babylon) | [![Dependency Status](https://david-dm.org/babel/babylon.svg)](https://david-dm.org/babel/babylon) |
+| [`babylon`](https://github.com/babel/babel/tree/master/packages/babylon) | [![npm](https://img.shields.io/npm/v/babylon.svg?maxAge=2592000)](https://www.npmjs.com/package/babylon) | [![Dependency Status](https://david-dm.org/babel/babylon.svg)](https://david-dm.org/babel/babylon) |
 | [`@babel/traverse`](/packages/babel-traverse) | [![npm](https://img.shields.io/npm/v/babel-traverse.svg?maxAge=2592000)](https://www.npmjs.com/package/babel-traverse) | [![Dependency Status](https://david-dm.org/babel/babel.svg?path=packages/babel-traverse)](https://david-dm.org/babel/babel?path=packages/babel-traverse) |
 | [`@babel/generator`](/packages/babel-generator) | [![npm](https://img.shields.io/npm/v/babel-generator.svg?maxAge=2592000)](https://www.npmjs.com/package/babel-generator) | [![Dependency Status](https://david-dm.org/babel/babel.svg?path=packages/babel-generator)](https://david-dm.org/babel/babel?path=packages/babel-generator) |
 
 [`@babel/core`](/packages/babel-core) is the Babel compiler itself; it exposes the `babel.transform` method, where `transformedCode = transform(src).code`.
 
 The compiler can be broken down into 3 parts:
-- The parser: [`babylon`](https://github.com/babel/babylon) (moved to a separate repo and versioned independently)
+- The parser: [`babylon`](https://github.com/babel/babel/tree/master/packages/babylon)
 - The transformer[s]: All the plugins/presets
   - These all use [`@babel/traverse`](/packages/babel-traverse) to traverse through the AST
 - The generator: [`@babel/generator`](/packages/babel-generator)
@@ -45,7 +45,7 @@ Check out the [`babel-handbook`](https://github.com/thejameskyle/babel-handbook/
 | [`@babel/helpers`](/packages/babel-helpers) | [![npm](https://img.shields.io/npm/v/babel-helpers.svg?maxAge=2592000)](https://www.npmjs.com/package/babel-helpers) | [![Dependency Status](https://david-dm.org/babel/babel.svg?path=packages/babel-helpers)](https://david-dm.org/babel/babel?path=packages/babel-helpers) |
 | [`@babel/code-frame`](/packages/babel-code-frame) | [![npm](https://img.shields.io/npm/v/babel-code-frame.svg?maxAge=2592000)](https://www.npmjs.com/package/babel-code-frame) | [![Dependency Status](https://david-dm.org/babel/babel.svg?path=packages/babel-code-frame)](https://david-dm.org/babel/babel?path=packages/babel-code-frame) |
 
-- [`@babel/cli`](/packages/babel-cli) is the CLI tool that runs `@babel/core` and helps with outputting to a directory, a file, stdout and more (also includes `babel-node`). Check out the [docs](https://babeljs.io/docs/usage/cli/).
+- [`@babel/cli`](/packages/babel-cli) is the CLI tool that runs `@babel/core` and helps with outputting to a directory, a file, stdout and more (also includes `@babel/node` cli). Check out the [docs](https://babeljs.io/docs/usage/cli/).
 - [`@babel/types`](/packages/babel-types) is used to validate, build and change AST nodes.
 - [`@babel/polyfill`](/packages/babel-polyfill) is [literally a wrapper](https://github.com/babel/babel/blob/master/packages/babel-polyfill/src/index.js) around [`core-js`](https://github.com/zloirock/core-js) and [regenerator-runtime](https://github.com/facebook/regenerator/tree/master/packages/regenerator-runtime). Check out the [docs](https://babeljs.io/docs/usage/polyfill/).
 - [`@babel/runtime`](/packages/babel-runtime) is similar to the polyfill except that it doesn't modify the global scope and is to be used with [`@babel/plugin-transform-runtime`](/packages/babel-plugin-transform-runtime) (usually in library/plugin code). Check out the [docs](https://babeljs.io/docs/plugins/transform-runtime/).

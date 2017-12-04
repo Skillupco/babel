@@ -29,6 +29,7 @@ export function rewriteModuleStatementsAndPrepareHeader(
 
   const meta = normalizeAndLoadModuleMetadata(path, exportName, {
     noInterop,
+    loose,
   });
 
   if (!allowTopLevelThis) {
@@ -55,13 +56,14 @@ export function rewriteModuleStatementsAndPrepareHeader(
   }
 
   const nameList = buildExportNameListDeclaration(path, meta);
+
   if (nameList) {
     meta.exportNameListName = nameList.name;
     headers.push(nameList.statement);
   }
 
   // Create all of the statically known named exports.
-  headers.push(...buildExportInitializationStatements(path, meta));
+  headers.push(...buildExportInitializationStatements(path, meta, loose));
 
   return { meta, headers };
 }
@@ -111,6 +113,7 @@ export function wrapInterop(
 export function buildNamespaceInitStatements(
   metadata: ModuleMetadata,
   sourceMetadata: SourceModuleMetadata,
+  loose: boolean = false,
 ) {
   const statements = [];
 
@@ -125,6 +128,9 @@ export function buildNamespaceInitStatements(
       }),
     );
   }
+  if (loose) {
+    statements.push(...buildReexportsFromMeta(metadata, sourceMetadata, loose));
+  }
   for (const exportName of sourceMetadata.reexportNamespace) {
     // Assign export to namespace object.
     statements.push(
@@ -136,7 +142,11 @@ export function buildNamespaceInitStatements(
     );
   }
   if (sourceMetadata.reexportAll) {
-    const statement = buildNamespaceReexport(metadata, sourceMetadata.name);
+    const statement = buildNamespaceReexport(
+      metadata,
+      sourceMetadata.name,
+      loose,
+    );
     statement.loc = sourceMetadata.reexportAll.loc;
 
     // Iterate props creating getter for each prop.
@@ -144,6 +154,31 @@ export function buildNamespaceInitStatements(
   }
   return statements;
 }
+
+const getTemplateForReexport = loose => {
+  return loose
+    ? template.statement`EXPORTS.EXPORT_NAME = NAMESPACE.IMPORT_NAME;`
+    : template`
+      Object.defineProperty(EXPORTS, "EXPORT_NAME", {
+        enumerable: true,
+        get: function() {
+          return NAMESPACE.IMPORT_NAME;
+        },
+      });
+    `;
+};
+
+const buildReexportsFromMeta = (meta, metadata, loose) => {
+  const templateForCurrentMode = getTemplateForReexport(loose);
+  return Array.from(metadata.reexports, ([exportName, importName]) =>
+    templateForCurrentMode({
+      EXPORTS: meta.exportName,
+      EXPORT_NAME: exportName,
+      NAMESPACE: metadata.name,
+      IMPORT_NAME: importName,
+    }),
+  );
+};
 
 /**
  * Build an "__esModule" header statement setting the property on a given object.
@@ -166,26 +201,35 @@ function buildESModuleHeader(
 /**
  * Create a re-export initialization loop for a specific imported namespace.
  */
-function buildNamespaceReexport(metadata, namespace) {
-  return template.statement`
-    Object.keys(NAMESPACE).forEach(function(key) {
-      if (key === "default" || key === "__esModule") return;
-      VERIFY_NAME_LIST;
+function buildNamespaceReexport(metadata, namespace, loose) {
+  return (loose
+    ? template.statement`
+        Object.keys(NAMESPACE).forEach(function(key) {
+          if (key === "default" || key === "__esModule") return;
+          VERIFY_NAME_LIST;
 
-      Object.defineProperty(EXPORTS, key, {
-        enumerable: true,
-        get: function() {
-          return NAMESPACE[key];
-        },
-      });
-    });
-  `({
+          EXPORTS[key] = NAMESPACE[key];
+        });
+      `
+    : template.statement`
+        Object.keys(NAMESPACE).forEach(function(key) {
+          if (key === "default" || key === "__esModule") return;
+          VERIFY_NAME_LIST;
+
+          Object.defineProperty(EXPORTS, key, {
+            enumerable: true,
+            get: function() {
+              return NAMESPACE[key];
+            },
+          });
+        });
+    `)({
     NAMESPACE: namespace,
     EXPORTS: metadata.exportName,
     VERIFY_NAME_LIST: metadata.exportNameListName
       ? template`
-          if (Object.prototype.hasOwnProperty.call(EXPORTS_LIST, key)) return;
-        `({ EXPORTS_LIST: metadata.exportNameListName })
+            if (Object.prototype.hasOwnProperty.call(EXPORTS_LIST, key)) return;
+          `({ EXPORTS_LIST: metadata.exportNameListName })
       : null,
   });
 }
@@ -239,6 +283,7 @@ function buildExportNameListDeclaration(
 function buildExportInitializationStatements(
   programPath: NodePath,
   metadata: ModuleMetadata,
+  loose: boolean = false,
 ) {
   const initStatements = [];
 
@@ -254,23 +299,10 @@ function buildExportInitializationStatements(
       exportNames.push(...data.names);
     }
   }
+
   for (const data of metadata.source.values()) {
-    for (const [exportName, importName] of data.reexports) {
-      initStatements.push(
-        template`
-          Object.defineProperty(EXPORTS, "EXPORT_NAME", {
-            enumerable: true,
-            get: function() {
-              return NAMESPACE.IMPORT_NAME;
-            },
-          });
-        `({
-          EXPORTS: metadata.exportName,
-          EXPORT_NAME: exportName,
-          NAMESPACE: data.name,
-          IMPORT_NAME: importName,
-        }),
-      );
+    if (!loose) {
+      initStatements.push(...buildReexportsFromMeta(metadata, data, loose));
     }
     for (const exportName of data.reexportNamespace) {
       exportNames.push(exportName);

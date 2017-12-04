@@ -12,15 +12,12 @@ import {
   assertSourceMaps,
   assertCompact,
   assertSourceType,
+  type ValidatorSet,
+  type Validator,
 } from "./option-assertions";
 
-type ValidatorSet = {
-  [string]: Validator<any>,
-};
-
-type Validator<T> = (string, mixed) => T;
-
 const ROOT_VALIDATORS: ValidatorSet = {
+  cwd: (assertString: Validator<$PropertyType<ValidatedOptions, "cwd">>),
   filename: (assertString: Validator<
     $PropertyType<ValidatedOptions, "filename">,
   >),
@@ -32,6 +29,10 @@ const ROOT_VALIDATORS: ValidatorSet = {
   >),
   code: (assertBoolean: Validator<$PropertyType<ValidatedOptions, "code">>),
   ast: (assertBoolean: Validator<$PropertyType<ValidatedOptions, "ast">>),
+
+  envName: (assertString: Validator<
+    $PropertyType<ValidatedOptions, "envName">,
+  >),
 };
 
 const NONPRESET_VALIDATORS: ValidatorSet = {
@@ -125,13 +126,17 @@ const COMMON_VALIDATORS: ValidatorSet = {
     $PropertyType<ValidatedOptions, "generatorOpts">,
   >),
 };
+export type InputOptions = ValidatedOptions;
+
 export type ValidatedOptions = {
+  cwd?: string,
   filename?: string,
   filenameRelative?: string,
   babelrc?: boolean,
   code?: boolean,
   ast?: boolean,
   inputSourceMap?: RootInputSourceMapOption,
+  envName?: string,
 
   extends?: string,
   env?: EnvSet<ValidatedOptions>,
@@ -182,12 +187,17 @@ export type EnvSet<T> = {
 export type IgnoreItem = string | Function | RegExp;
 export type IgnoreList = $ReadOnlyArray<IgnoreItem>;
 
+export type PluginOptions = {} | void | false;
 export type PluginTarget = string | {} | Function;
-export type PluginItem = PluginTarget | [PluginTarget, {} | void];
+export type PluginItem =
+  | Plugin
+  | PluginTarget
+  | [PluginTarget, PluginOptions]
+  | [PluginTarget, PluginOptions, string];
 export type PluginList = $ReadOnlyArray<PluginItem>;
 
 export type SourceMapsOption = boolean | "inline" | "both";
-export type SourceTypeOption = "module" | "script";
+export type SourceTypeOption = "module" | "script" | "unambiguous";
 export type CompactOption = boolean | "auto";
 export type RootInputSourceMapOption = {} | boolean;
 
@@ -202,6 +212,9 @@ export function validate(type: OptionsType, opts: {}): ValidatedOptions {
     }
     if (type !== "arguments" && ROOT_VALIDATORS[key]) {
       throw new Error(`.${key} is only allowed in root programmatic options`);
+    }
+    if (type === "env" && key === "env") {
+      throw new Error(`.${key} is not allowed inside another env block`);
     }
 
     const validator =
