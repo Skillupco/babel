@@ -19,6 +19,11 @@ build: clean
 	node ./packages/babel-types/scripts/generateTypeHelpers.js
 	# call build again as the generated files might need to be compiled again.
 	./node_modules/.bin/gulp build
+	# generate flow and typescript typings
+	node scripts/generators/flow.js > ./packages/babel-types/lib/index.js.flow
+	node scripts/generators/typescript.js > ./packages/babel-types/lib/index.d.ts
+	# generate docs
+	node scripts/generators/docs.js > ./packages/babel-types/README.md
 ifneq ("$(BABEL_ENV)", "cov")
 	make build-standalone
 	make build-preset-env-standalone
@@ -39,7 +44,6 @@ build-dist: build
 	scripts/build-dist.sh
 	cd packages/babel-runtime; \
 	node scripts/build-dist.js
-	node scripts/generate-babel-types-docs.js
 
 watch: clean
 	make clean-lib
