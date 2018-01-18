@@ -121,11 +121,9 @@ export default function(commander, filenames, opts) {
         util.deleteDir(commander.outDir);
       }
 
-      const files = util.readdir(
-        dirname,
-        commander.includeDotfiles,
-        filterFiles,
-      );
+      const files = util
+        .readdir(dirname, commander.includeDotfiles)
+        .filter(filterFiles);
       sequentialHandleFile(files, dirname, callback);
     } else {
       write(
@@ -160,6 +158,7 @@ export default function(commander, filenames, opts) {
       const watcher = chokidar.watch(dirname, {
         persistent: true,
         ignoreInitial: true,
+        ignored: opts.ignore,
         awaitWriteFinish: {
           stabilityThreshold: 50,
           pollInterval: 10,
