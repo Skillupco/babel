@@ -26,9 +26,9 @@ export interface NodeBase {
   end: number;
   loc: SourceLocation;
   range: [number, number];
-  leadingComments?: ?Array<Comment>;
-  trailingComments?: ?Array<Comment>;
-  innerComments?: ?Array<Comment>;
+  leadingComments?: Array<Comment>;
+  trailingComments?: Array<Comment>;
+  innerComments?: Array<Comment>;
 
   extra: { [key: string]: any };
 }
@@ -1149,7 +1149,7 @@ export type TsParenthesizedType = TsTypeBase & {
 
 export type TsTypeOperator = TsTypeBase & {
   type: "TSTypeOperator",
-  operator: "keyof",
+  operator: "keyof" | "unique",
   typeAnnotation: TsType,
 };
 
