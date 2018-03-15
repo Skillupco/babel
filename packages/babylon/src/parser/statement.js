@@ -146,8 +146,25 @@ export default class StatementParser extends ExpressionParser {
         let result;
         if (starttype == tt._import) {
           result = this.parseImport(node);
+
+          if (
+            result.type === "ImportDeclaration" &&
+            (!result.importKind || result.importKind === "value")
+          ) {
+            this.sawUnambiguousESM = true;
+          }
         } else {
           result = this.parseExport(node);
+
+          if (
+            (result.type === "ExportNamedDeclaration" &&
+              (!result.exportKind || result.exportKind === "value")) ||
+            (result.type === "ExportAllDeclaration" &&
+              (!result.exportKind || result.exportKind === "value")) ||
+            result.type === "ExportDefaultDeclaration"
+          ) {
+            this.sawUnambiguousESM = true;
+          }
         }
 
         this.assertModuleNodeAllowed(node);
@@ -155,7 +172,7 @@ export default class StatementParser extends ExpressionParser {
         return result;
       }
       case tt.name:
-        if (this.state.value === "async") {
+        if (this.isContextual("async")) {
           // peek ahead and see if next token is a function
           const state = this.state.clone();
           this.next();
@@ -192,6 +209,9 @@ export default class StatementParser extends ExpressionParser {
       this.raise(
         node.start,
         `'import' and 'export' may appear only with 'sourceType: "module"'`,
+        {
+          code: "BABEL_PARSER_SOURCETYPE_MODULE_REQUIRED",
+        },
       );
     }
   }
@@ -364,8 +384,19 @@ export default class StatementParser extends ExpressionParser {
       this.finishNode(init, "VariableDeclaration");
 
       if (this.match(tt._in) || this.isContextual("of")) {
-        if (init.declarations.length === 1 && !init.declarations[0].init) {
-          return this.parseForIn(node, init, forAwait);
+        if (init.declarations.length === 1) {
+          const declaration = init.declarations[0];
+          const isForInInitializer =
+            varKind === tt._var &&
+            declaration.init &&
+            declaration.id.type != "ObjectPattern" &&
+            declaration.id.type != "ArrayPattern" &&
+            !this.isContextual("of");
+          if (this.state.strict && isForInInitializer) {
+            this.raise(this.state.start, "for-in initializer in strict mode");
+          } else if (isForInInitializer || !declaration.init) {
+            return this.parseForIn(node, init, forAwait);
+          }
         }
       }
       if (forAwait) {
@@ -956,8 +987,11 @@ export default class StatementParser extends ExpressionParser {
     state: { hadConstructor: boolean },
   ): void {
     let isStatic = false;
+    const containsEsc = this.state.containsEsc;
+
     if (this.match(tt.name) && this.state.value === "static") {
       const key = this.parseIdentifier(true); // eats 'static'
+
       if (this.isClassMethod()) {
         const method: N.ClassMethod = (member: any);
 
@@ -983,7 +1017,10 @@ export default class StatementParser extends ExpressionParser {
         prop.static = false;
         classBody.body.push(this.parseClassProperty(prop));
         return;
+      } else if (containsEsc) {
+        throw this.unexpected();
       }
+
       // otherwise something static
       isStatic = true;
     }
@@ -1147,7 +1184,7 @@ export default class StatementParser extends ExpressionParser {
         );
       }
 
-      this.checkGetterSetterParamCount(publicMethod);
+      this.checkGetterSetterParams(publicMethod);
     } else if (this.isLineTerminator()) {
       // an uninitialized class property (due to ASI, since we don't otherwise recognize the next token)
       if (isPrivate) {
@@ -1488,7 +1525,10 @@ export default class StatementParser extends ExpressionParser {
           node.declaration.type === "FunctionDeclaration" ||
           node.declaration.type === "ClassDeclaration"
         ) {
-          this.checkDuplicateExports(node, node.declaration.id.name);
+          const id = node.declaration.id;
+          if (!id) throw new Error("Assertion failure");
+
+          this.checkDuplicateExports(node, id.name);
         } else if (node.declaration.type === "VariableDeclaration") {
           for (const declaration of node.declaration.declarations) {
             this.checkDeclaration(declaration.id);

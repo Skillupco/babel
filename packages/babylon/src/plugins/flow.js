@@ -763,7 +763,7 @@ export default (superClass: Class<Parser>): Class<Parser> =>
             this.startNodeAt(node.start, node.loc.start),
           );
           if (kind === "get" || kind === "set") {
-            this.flowCheckGetterSetterParamCount(node);
+            this.flowCheckGetterSetterParams(node);
           }
         } else {
           if (kind !== "init") this.unexpected();
@@ -783,19 +783,28 @@ export default (superClass: Class<Parser>): Class<Parser> =>
       }
     }
 
-    // This is similar to checkGetterSetterParamCount, but as
+    // This is similar to checkGetterSetterParams, but as
     // babylon uses non estree properties we cannot reuse it here
-    flowCheckGetterSetterParamCount(
+    flowCheckGetterSetterParams(
       property: N.FlowObjectTypeProperty | N.FlowObjectTypeSpreadProperty,
     ): void {
       const paramCount = property.kind === "get" ? 0 : 1;
-      if (property.value.params.length !== paramCount) {
-        const start = property.start;
+      const start = property.start;
+      const length =
+        property.value.params.length + (property.value.rest ? 1 : 0);
+      if (length !== paramCount) {
         if (property.kind === "get") {
-          this.raise(start, "getter should have no params");
+          this.raise(start, "getter must not have any formal parameters");
         } else {
-          this.raise(start, "setter should have exactly one param");
+          this.raise(start, "setter must have exactly one formal parameter");
         }
+      }
+
+      if (property.kind === "set" && property.value.rest) {
+        this.raise(
+          start,
+          "setter function argument must not be a rest parameter",
+        );
       }
     }
 
@@ -1632,7 +1641,7 @@ export default (superClass: Class<Parser>): Class<Parser> =>
         return this.finishOp(tt.relational, 1);
       } else if (isIteratorStart(code, next)) {
         this.state.isIterator = true;
-        return super.readWord(code);
+        return super.readWord();
       } else {
         return super.readToken(code);
       }
@@ -1828,6 +1837,7 @@ export default (superClass: Class<Parser>): Class<Parser> =>
       isAsync: boolean,
       isPattern: boolean,
       refShorthandDefaultPos: ?Pos,
+      containsEsc: boolean,
     ): void {
       if ((prop: $FlowFixMe).variance) {
         this.unexpected((prop: $FlowFixMe).variance.start);
@@ -1850,6 +1860,7 @@ export default (superClass: Class<Parser>): Class<Parser> =>
         isAsync,
         isPattern,
         refShorthandDefaultPos,
+        containsEsc,
       );
 
       // add typeParameters if we found them

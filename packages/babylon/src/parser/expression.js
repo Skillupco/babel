@@ -426,7 +426,10 @@ export default class ExpressionParser extends LValParser {
     startLoc: Position,
     noCalls?: ?boolean,
   ): N.Expression {
-    const state = { stop: false };
+    const state = {
+      optionalChainMember: false,
+      stop: false,
+    };
     do {
       base = this.parseSubscript(base, startPos, startLoc, noCalls, state);
     } while (!state.stop);
@@ -439,7 +442,7 @@ export default class ExpressionParser extends LValParser {
     startPos: number,
     startLoc: Position,
     noCalls: ?boolean,
-    state: { stop: boolean, optionalChainMember?: boolean },
+    state: N.ParseSubscriptState,
   ): N.Expression {
     if (!noCalls && this.eat(tt.doubleColon)) {
       const node = this.startNodeAt(startPos, startLoc);
@@ -554,14 +557,13 @@ export default class ExpressionParser extends LValParser {
       const node = this.startNodeAt(startPos, startLoc);
       node.tag = base;
       node.quasi = this.parseTemplate(true);
-      if (!state.optionalChainMember) {
-        return this.finishNode(node, "TaggedTemplateExpression");
-      } else {
+      if (state.optionalChainMember) {
         this.raise(
           startPos,
           "Tagged Template Literals are not allowed in optionalChain",
         );
       }
+      return this.finishNode(node, "TaggedTemplateExpression");
     } else {
       state.stop = true;
       return base;
@@ -570,6 +572,7 @@ export default class ExpressionParser extends LValParser {
 
   atPossibleAsync(base: N.Expression): boolean {
     return (
+      !this.state.containsEsc &&
       this.state.potentialArrowAt === base.start &&
       base.type === "Identifier" &&
       base.name === "async" &&
@@ -737,6 +740,7 @@ export default class ExpressionParser extends LValParser {
       case tt.name: {
         node = this.startNode();
         const allowAwait = this.state.value === "await" && this.state.inAsync;
+        const containsEsc = this.state.containsEsc;
         const allowYield = this.shouldAllowYieldIdentifier();
         const id = this.parseIdentifier(allowAwait || allowYield);
 
@@ -745,6 +749,7 @@ export default class ExpressionParser extends LValParser {
             return this.parseAwait(node);
           }
         } else if (
+          !containsEsc &&
           id.name === "async" &&
           this.match(tt._function) &&
           !this.canInsertSemicolon()
@@ -913,9 +918,11 @@ export default class ExpressionParser extends LValParser {
       }
     }
 
+    const containsEsc = this.state.containsEsc;
+
     node.property = this.parseIdentifier(true);
 
-    if (node.property.name !== propertyName) {
+    if (node.property.name !== propertyName || containsEsc) {
       this.raise(
         node.property.start,
         `The only valid meta property for ${meta.name} is ${
@@ -947,8 +954,11 @@ export default class ExpressionParser extends LValParser {
       this.raise(
         id.start,
         `import.meta may appear only with 'sourceType: "module"'`,
+        { code: "BABEL_PARSER_SOURCETYPE_MODULE_REQUIRED" },
       );
     }
+    this.sawUnambiguousESM = true;
+
     return this.parseMetaProperty(node, id, "meta");
   }
 
@@ -1301,6 +1311,8 @@ export default class ExpressionParser extends LValParser {
         isGenerator = this.eat(tt.star);
       }
 
+      const containsEsc = this.state.containsEsc;
+
       if (!isPattern && this.isContextual("async")) {
         if (isGenerator) this.unexpected();
 
@@ -1335,6 +1347,7 @@ export default class ExpressionParser extends LValParser {
         isAsync,
         isPattern,
         refShorthandDefaultPos,
+        containsEsc,
       );
       this.checkPropClash(prop, propHash);
 
@@ -1380,16 +1393,23 @@ export default class ExpressionParser extends LValParser {
   }
 
   // get methods aren't allowed to have any parameters
-  // set methods must have exactly 1 parameter
-  checkGetterSetterParamCount(method: N.ObjectMethod | N.ClassMethod): void {
+  // set methods must have exactly 1 parameter which is not a rest parameter
+  checkGetterSetterParams(method: N.ObjectMethod | N.ClassMethod): void {
     const paramCount = method.kind === "get" ? 0 : 1;
+    const start = method.start;
     if (method.params.length !== paramCount) {
-      const start = method.start;
       if (method.kind === "get") {
-        this.raise(start, "getter should have no params");
+        this.raise(start, "getter must not have any formal parameters");
       } else {
-        this.raise(start, "setter should have exactly one param");
+        this.raise(start, "setter must have exactly one formal parameter");
       }
+    }
+
+    if (method.kind === "set" && method.params[0].type === "RestElement") {
+      this.raise(
+        start,
+        "setter function argument must not be a rest parameter",
+      );
     }
   }
 
@@ -1398,6 +1418,7 @@ export default class ExpressionParser extends LValParser {
     isGenerator: boolean,
     isAsync: boolean,
     isPattern: boolean,
+    containsEsc: boolean,
   ): ?N.ObjectMethod {
     if (isAsync || isGenerator || this.match(tt.parenL)) {
       if (isPattern) this.unexpected();
@@ -1412,7 +1433,7 @@ export default class ExpressionParser extends LValParser {
       );
     }
 
-    if (this.isGetterOrSetterMethod(prop, isPattern)) {
+    if (!containsEsc && this.isGetterOrSetterMethod(prop, isPattern)) {
       if (isGenerator || isAsync) this.unexpected();
       prop.kind = prop.key.name;
       this.parsePropertyName(prop);
@@ -1423,7 +1444,7 @@ export default class ExpressionParser extends LValParser {
         /* isConstructor */ false,
         "ObjectMethod",
       );
-      this.checkGetterSetterParamCount(prop);
+      this.checkGetterSetterParams(prop);
       return prop;
     }
   }
@@ -1480,9 +1501,16 @@ export default class ExpressionParser extends LValParser {
     isAsync: boolean,
     isPattern: boolean,
     refShorthandDefaultPos: ?Pos,
+    containsEsc: boolean,
   ): void {
     const node =
-      this.parseObjectMethod(prop, isGenerator, isAsync, isPattern) ||
+      this.parseObjectMethod(
+        prop,
+        isGenerator,
+        isAsync,
+        isPattern,
+        containsEsc,
+      ) ||
       this.parseObjectProperty(
         prop,
         startPos,
@@ -1675,9 +1703,7 @@ export default class ExpressionParser extends LValParser {
 
     const oldStrict = this.state.strict;
     if (isStrict) this.state.strict = isStrict;
-    if (node.id) {
-      this.checkReservedWord(node.id, node.start, true, true);
-    }
+
     if (checkLVal) {
       const nameHash: any = Object.create(null);
       if (node.id) {

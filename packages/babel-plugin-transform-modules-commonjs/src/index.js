@@ -1,3 +1,4 @@
+import { declare } from "@babel/helper-plugin-utils";
 import {
   isModule,
   rewriteModuleStatementsAndPrepareHeader,
@@ -9,7 +10,9 @@ import {
 import simplifyAccess from "@babel/helper-simple-access";
 import { template, types as t } from "@babel/core";
 
-export default function(api, options) {
+export default declare((api, options) => {
+  api.assertVersion(7);
+
   const {
     loose,
     allowTopLevelThis,
@@ -31,7 +34,10 @@ export default function(api, options) {
 
   const getAssertion = localName => template.expression.ast`
     (function(){
-      throw new Error("The CommonJS '" + "${localName}" + "' variable is not available in ES6 modules.");
+      throw new Error(
+        "The CommonJS '" + "${localName}" + "' variable is not available in ES6 modules." +
+        "Consider setting setting sourceType:script or sourceType:unambiguous in your " +
+        "Babel config for this file.");
     })()
   `;
 
@@ -98,9 +104,7 @@ export default function(api, options) {
     visitor: {
       Program: {
         exit(path) {
-          // For now this requires unambiguous rather that just sourceType
-          // because Babel currently parses all files as sourceType:module.
-          if (!isModule(path, true /* requireUnambiguous */)) return;
+          if (!isModule(path)) return;
 
           // Rename the bindings auto-injected into the scope so there is no
           // risk of conflict between the bindings.
@@ -178,4 +182,4 @@ export default function(api, options) {
       },
     },
   };
-}
+});
