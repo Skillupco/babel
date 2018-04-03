@@ -1,5 +1,3 @@
-/* eslint max-len: 0 */
-
 // @flow
 
 // A recursive descent parser operates by defining functions for all
@@ -153,7 +151,16 @@ export default class ExpressionParser extends LValParser {
     }
     if (this.state.type.isAssign) {
       const node = this.startNodeAt(startPos, startLoc);
-      node.operator = this.state.value;
+      const operator = this.state.value;
+      node.operator = operator;
+
+      if (operator === "??=") {
+        this.expectPlugin("nullishCoalescingOperator");
+        this.expectPlugin("logicalAssignment");
+      }
+      if (operator === "||=" || operator === "&&=") {
+        this.expectPlugin("logicalAssignment");
+      }
       node.left = this.match(tt.eq)
         ? this.toAssignable(left, undefined, "assignment expression")
         : left;
@@ -273,11 +280,12 @@ export default class ExpressionParser extends LValParser {
     if (prec != null && (!noIn || !this.match(tt._in))) {
       if (prec > minPrec) {
         const node = this.startNodeAt(leftStartPos, leftStartLoc);
+        const operator = this.state.value;
         node.left = left;
-        node.operator = this.state.value;
+        node.operator = operator;
 
         if (
-          node.operator === "**" &&
+          operator === "**" &&
           left.type === "UnaryExpression" &&
           left.extra &&
           !left.extra.parenthesizedArgument &&
@@ -290,19 +298,20 @@ export default class ExpressionParser extends LValParser {
         }
 
         const op = this.state.type;
+        if (op === tt.nullishCoalescing) {
+          this.expectPlugin("nullishCoalescingOperator");
+        } else if (op === tt.pipeline) {
+          this.expectPlugin("pipelineOperator");
+        }
+
         this.next();
 
         const startPos = this.state.start;
         const startLoc = this.state.startLoc;
 
-        if (node.operator === "|>") {
-          this.expectPlugin("pipelineOperator");
+        if (op === tt.pipeline) {
           // Support syntax such as 10 |> x => x + 1
           this.state.potentialArrowAt = startPos;
-        }
-
-        if (node.operator === "??") {
-          this.expectPlugin("nullishCoalescingOperator");
         }
 
         node.right = this.parseExprOp(
@@ -436,7 +445,10 @@ export default class ExpressionParser extends LValParser {
     return base;
   }
 
-  /** @param state Set 'state.stop = true' to indicate that we should stop parsing subscripts.  'state.optionalChainMember to indicate that the member is currently in OptionalChain'*/
+  /**
+   * @param state Set 'state.stop = true' to indicate that we should stop parsing subscripts.
+   *   state.optionalChainMember to indicate that the member is currently in OptionalChain
+   */
   parseSubscript(
     base: N.Expression,
     startPos: number,
@@ -625,7 +637,8 @@ export default class ExpressionParser extends LValParser {
         if (this.eat(close)) break;
       }
 
-      // we need to make sure that if this is an async arrow functions, that we don't allow inner parens inside the params
+      // we need to make sure that if this is an async arrow functions,
+      // that we don't allow inner parens inside the params
       if (this.match(tt.parenL) && !innerParenStart) {
         innerParenStart = this.state.start;
       }
@@ -710,7 +723,8 @@ export default class ExpressionParser extends LValParser {
         ) {
           this.raise(
             node.start,
-            "super() is only valid inside a class constructor. Make sure the method name is spelled exactly as 'constructor'.",
+            "super() is only valid inside a class constructor. " +
+              "Make sure the method name is spelled exactly as 'constructor'.",
           );
         }
         return this.finishNode(node, "Super");
@@ -739,13 +753,21 @@ export default class ExpressionParser extends LValParser {
 
       case tt.name: {
         node = this.startNode();
-        const allowAwait = this.state.value === "await" && this.state.inAsync;
+        const allowAwait =
+          this.state.value === "await" &&
+          (this.state.inAsync ||
+            (!this.state.inFunction && this.options.allowAwaitOutsideFunction));
+
         const containsEsc = this.state.containsEsc;
         const allowYield = this.shouldAllowYieldIdentifier();
         const id = this.parseIdentifier(allowAwait || allowYield);
 
         if (id.name === "await") {
-          if (this.state.inAsync || this.inModule) {
+          if (
+            this.state.inAsync ||
+            this.inModule ||
+            (!this.state.inFunction && this.options.allowAwaitOutsideFunction)
+          ) {
             return this.parseAwait(node);
           }
         } else if (
@@ -913,7 +935,7 @@ export default class ExpressionParser extends LValParser {
       if (this.isContextual(propertyName)) {
         this.expectPlugin("functionSent");
       } else if (!this.hasPlugin("functionSent")) {
-        // They didn't actually say `function.sent`, just `function.`, so a simple error would be less confusing.
+        // The code wasn't `function.sent` but just `function.`, so a simple error is less confusing.
         this.unexpected();
       }
     }
@@ -1848,7 +1870,10 @@ export default class ExpressionParser extends LValParser {
 
   parseAwait(node: N.AwaitExpression): N.AwaitExpression {
     // istanbul ignore next: this condition is checked at the call site so won't be hit here
-    if (!this.state.inAsync) {
+    if (
+      !this.state.inAsync &&
+      (this.state.inFunction || !this.options.allowAwaitOutsideFunction)
+    ) {
       this.unexpected();
     }
     if (this.match(tt.star)) {
