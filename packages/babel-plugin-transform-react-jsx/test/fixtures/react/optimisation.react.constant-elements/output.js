@@ -9,11 +9,11 @@ var _ref =
 let App =
 /*#__PURE__*/
 function (_React$Component) {
-  babelHelpers.inherits(App, _React$Component);
+  "use strict";
 
   function App() {
     babelHelpers.classCallCheck(this, App);
-    return babelHelpers.possibleConstructorReturn(this, (App.__proto__ || Object.getPrototypeOf(App)).apply(this, arguments));
+    return babelHelpers.possibleConstructorReturn(this, babelHelpers.getPrototypeOf(App).apply(this, arguments));
   }
 
   babelHelpers.createClass(App, [{
@@ -29,5 +29,6 @@ function (_React$Component) {
     </div>;
     }
   }]);
+  babelHelpers.inherits(App, _React$Component);
   return App;
 }(React.Component);

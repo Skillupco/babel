@@ -10,20 +10,19 @@ var _BaseFoo2 = babelHelpers.interopRequireDefault(require("./BaseFoo"));
 var SubFoo =
 /*#__PURE__*/
 function (_BaseFoo) {
-  babelHelpers.inherits(SubFoo, _BaseFoo);
-
   function SubFoo() {
     babelHelpers.classCallCheck(this, SubFoo);
-    return babelHelpers.possibleConstructorReturn(this, (SubFoo.__proto__ || Object.getPrototypeOf(SubFoo)).apply(this, arguments));
+    return babelHelpers.possibleConstructorReturn(this, babelHelpers.getPrototypeOf(SubFoo).apply(this, arguments));
   }
 
   babelHelpers.createClass(SubFoo, null, [{
     key: "talk",
     value: function talk() {
-      babelHelpers.get(SubFoo.__proto__ || Object.getPrototypeOf(SubFoo), "talk", this).call(this);
+      babelHelpers.get(babelHelpers.getPrototypeOf(SubFoo), "talk", this).call(this);
       console.log('SubFoo.talk');
     }
   }]);
+  babelHelpers.inherits(SubFoo, _BaseFoo);
   return SubFoo;
 }(_BaseFoo2.default);
 

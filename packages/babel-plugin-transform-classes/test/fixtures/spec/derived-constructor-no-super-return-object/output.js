@@ -1,7 +1,7 @@
 var Child =
 /*#__PURE__*/
 function (_Base) {
-  babelHelpers.inherits(Child, _Base);
+  "use strict";
 
   function Child() {
     var _this;
@@ -10,5 +10,6 @@ function (_Base) {
     return babelHelpers.possibleConstructorReturn(_this, {});
   }
 
+  babelHelpers.inherits(Child, _Base);
   return Child;
 }(Base);

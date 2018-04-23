@@ -1,17 +1,18 @@
 var Foo =
 /*#__PURE__*/
 function (_Bar) {
-  babelHelpers.inherits(Foo, _Bar);
+  "use strict";
 
   function Foo() {
     var _this;
 
     babelHelpers.classCallCheck(this, Foo);
 
-    var fn = () => _this = babelHelpers.possibleConstructorReturn(this, (Foo.__proto__ || Object.getPrototypeOf(Foo)).call(this));
+    var fn = () => _this = babelHelpers.possibleConstructorReturn(this, babelHelpers.getPrototypeOf(Foo).call(this));
 
     return babelHelpers.possibleConstructorReturn(_this);
   }
 
+  babelHelpers.inherits(Foo, _Bar);
   return Foo;
 }(Bar);

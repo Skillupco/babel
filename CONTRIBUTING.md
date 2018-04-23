@@ -29,18 +29,19 @@ contributing, please read the
  - Check out [the Babel Plugin Handbook](https://github.com/thejameskyle/babel-handbook/blob/master/translations/en/plugin-handbook.md#babel-plugin-handbook) - core plugins are written the same way as any other plugin!
  - Check out [AST Explorer](http://astexplorer.net/#/scUfOmVOG5) to learn more about ASTs or make your own plugin in the browser
 - When you feel ready to jump into the Babel source code, a good place to start is to look for issues tagged with [help wanted](https://github.com/babel/babel/labels/help%20wanted) and/or [good first issue](https://github.com/babel/babel/labels/good%20first%20issue).
-- Follow along with what we are working on by joining our Slack, following our announcements on [Twitter](https://twitter.com/babeljs), and reading (or participating!) in our [meeting notes](https://github.com/babel/notes).
+- Follow along with what we are working on by joining our [Slack](https://babeljs.slack.com) (you can sign-up [here](https://slack.babeljs.io/)
+    for an invite), following our announcements on [Twitter](https://twitter.com/babeljs), and reading (or participating!) in our [meeting notes](https://github.com/babel/notes).
 - Check out our [website](http://babeljs.io/) and the [repo](https://github.com/babel/website)
 
 ## Chat
 
-Feel free to check out the `#discussion`/`#development` channels on our [Slack](https://slack.babeljs.io). Some of us are always online to chat!
+Feel free to check out the `#discussion`/`#development` channels on our [Slack](https://slack.babeljs.io) (you can sign-up [here](https://slack.babeljs.io/) for an invite). Some of us are always online to chat!
 
 ## Developing
 
 **Note:** Versions `< 5.1.10` can't be built.
 
-Babel is built for Node 4 and up but we develop using Node 8 and yarn. You can check this with `node -v`.
+Babel is built for Node 6 and up but we develop using Node 8 and yarn. You can check this with `node -v`.
 
 Make sure that Yarn is installed with version >= `0.28.0`.
 Installation instructions can be found here: https://yarnpkg.com/en/docs/install.
@@ -139,6 +140,12 @@ $ TEST_DEBUG=true make test
 
 You can combine `TEST_DEBUG` with `TEST_GREP` or `TEST_ONLY` to debug a subset of tests. If you plan to stay long in the debugger (which you'll likely do!), you may increase the test timeout by editing [test/mocha.opts](https://github.com/babel/babel/blob/master/test/mocha.opts).
 
+To overwrite any test fixtures when fixing a bug or anything, add the env variable `OVERWRITE=true`
+
+```sh
+$ OVERWRITE=true TEST_ONLY=babel-plugin-transform-classes make test-only
+```
+
 To test the code coverage, use:
 
 ```sh
@@ -196,8 +203,8 @@ In an `exec.js` test, we run or check that the code actually does what it's supp
 
 ```js
 // exec.js
-assert.equal(8, 2 ** 3);
-assert.equal(24, 3 * 2 ** 3);
+expect(2 ** 3).toBe(8);
+expect(3 * 2 ** 3).toBe(24);
 ```
 
 If you need to check for an error that is thrown you can add to the `options.json`

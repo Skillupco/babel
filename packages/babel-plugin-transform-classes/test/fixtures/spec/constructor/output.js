@@ -1,4 +1,6 @@
 var Test = function Test() {
+  "use strict";
+
   babelHelpers.classCallCheck(this, Test);
   this.state = "test";
 };
@@ -6,21 +8,24 @@ var Test = function Test() {
 var Foo =
 /*#__PURE__*/
 function (_Bar) {
-  babelHelpers.inherits(Foo, _Bar);
+  "use strict";
 
   function Foo() {
     var _this;
 
     babelHelpers.classCallCheck(this, Foo);
-    _this = babelHelpers.possibleConstructorReturn(this, (Foo.__proto__ || Object.getPrototypeOf(Foo)).call(this));
+    _this = babelHelpers.possibleConstructorReturn(this, babelHelpers.getPrototypeOf(Foo).call(this));
     _this.state = "test";
     return _this;
   }
 
+  babelHelpers.inherits(Foo, _Bar);
   return Foo;
 }(Bar);
 
 var ConstructorScoping = function ConstructorScoping() {
+  "use strict";
+
   babelHelpers.classCallCheck(this, ConstructorScoping);
   var bar;
   {

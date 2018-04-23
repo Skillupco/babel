@@ -3,13 +3,14 @@ function broken(x) {
     var Foo =
     /*#__PURE__*/
     function (_Bar) {
-      babelHelpers.inherits(Foo, _Bar);
+      "use strict";
 
       function Foo() {
         babelHelpers.classCallCheck(this, Foo);
-        return babelHelpers.possibleConstructorReturn(this, (Foo.__proto__ || Object.getPrototypeOf(Foo)).apply(this, arguments));
+        return babelHelpers.possibleConstructorReturn(this, babelHelpers.getPrototypeOf(Foo).apply(this, arguments));
       }
 
+      babelHelpers.inherits(Foo, _Bar);
       return Foo;
     }(Bar);
 

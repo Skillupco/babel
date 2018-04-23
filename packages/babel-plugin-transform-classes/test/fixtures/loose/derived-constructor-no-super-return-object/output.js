@@ -1,7 +1,7 @@
 var Child =
 /*#__PURE__*/
 function (_Base) {
-  babelHelpers.inheritsLoose(Child, _Base);
+  "use strict";
 
   function Child() {
     var _this;
@@ -9,5 +9,6 @@ function (_Base) {
     return {} || babelHelpers.assertThisInitialized(_this);
   }
 
+  babelHelpers.inheritsLoose(Child, _Base);
   return Child;
 }(Base);
