@@ -39,11 +39,12 @@ function mtime(filename) {
 function compile(code, filename) {
   // merge in base options and resolve all the plugins and presets relative to this file
   const opts = new OptionManager().init(
-    Object.assign(
-      { sourceRoot: path.dirname(filename) }, // sourceRoot can be overwritten
-      deepClone(transformOpts),
-      { filename },
-    ),
+    // sourceRoot can be overwritten
+    {
+      sourceRoot: path.dirname(filename),
+      ...deepClone(transformOpts),
+      filename,
+    },
   );
 
   // Bail out ASAP if the file has been ignored.
@@ -103,14 +104,14 @@ export function revert() {
   delete require.cache[require.resolve(__filename)];
 }
 
-register({
-  extensions: DEFAULT_EXTENSIONS,
-});
+register();
 
 export default function register(opts?: Object = {}) {
   // Clone to avoid mutating the arguments object with the 'delete's below.
-  opts = Object.assign({}, opts);
-  if (opts.extensions) hookExtensions(opts.extensions);
+  opts = {
+    ...opts,
+  };
+  hookExtensions(opts.extensions || DEFAULT_EXTENSIONS);
 
   if (opts.cache === false && cache) {
     registerCache.clear();
@@ -123,7 +124,9 @@ export default function register(opts?: Object = {}) {
   delete opts.extensions;
   delete opts.cache;
 
-  transformOpts = Object.assign({}, opts);
+  transformOpts = {
+    ...opts,
+  };
 
   let { cwd = "." } = transformOpts;
 

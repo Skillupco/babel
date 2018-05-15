@@ -51,26 +51,19 @@ export default declare((api, options) => {
     environmentVisitor,
   ]);
 
-  const foldDefinePropertyCalls = nodes =>
-    t.expressionStatement(
-      nodes.reduce((folded, node) => {
-        // update defineProperty's obj argument
-        node.arguments[0] = folded;
-        return node;
-      }),
-    );
-
   const buildClassPropertySpec = (
     ref,
     { key, value, computed },
     scope,
     state,
   ) => {
-    return t.callExpression(state.addHelper("defineProperty"), [
-      ref,
-      t.isIdentifier(key) && !computed ? t.stringLiteral(key.name) : key,
-      value || scope.buildUndefinedNode(),
-    ]);
+    return t.expressionStatement(
+      t.callExpression(state.addHelper("defineProperty"), [
+        ref,
+        t.isIdentifier(key) && !computed ? t.stringLiteral(key.name) : key,
+        value || scope.buildUndefinedNode(),
+      ]),
+    );
   };
 
   const buildClassPropertyLoose = (ref, { key, value, computed }, scope) => {
@@ -168,16 +161,7 @@ export default declare((api, options) => {
           }
         }
 
-        const afterNodes =
-          !loose && staticNodes.length
-            ? foldDefinePropertyCalls(staticNodes)
-            : staticNodes;
-
         if (instanceBody.length) {
-          const assignments = loose
-            ? instanceBody
-            : foldDefinePropertyCalls(instanceBody);
-
           if (!constructor) {
             const newConstructor = t.classMethod(
               "constructor",
@@ -199,7 +183,10 @@ export default declare((api, options) => {
           }
 
           const state = { scope: constructor.scope };
-          for (const prop of props) prop.traverse(referenceVisitor, state);
+          for (const prop of props) {
+            if (prop.node.static) continue;
+            prop.traverse(referenceVisitor, state);
+          }
 
           //
 
@@ -207,10 +194,10 @@ export default declare((api, options) => {
             const bareSupers = [];
             constructor.traverse(findBareSupers, bareSupers);
             for (const bareSuper of bareSupers) {
-              bareSuper.insertAfter(assignments);
+              bareSuper.insertAfter(instanceBody);
             }
           } else {
-            constructor.get("body").unshiftContainer("body", assignments);
+            constructor.get("body").unshiftContainer("body", instanceBody);
           }
         }
 
@@ -218,7 +205,7 @@ export default declare((api, options) => {
           prop.remove();
         }
 
-        if (computedNodes.length === 0 && afterNodes.length === 0) return;
+        if (computedNodes.length === 0 && staticNodes.length === 0) return;
 
         if (path.isClassExpression()) {
           path.scope.push({ id: ref });
@@ -231,7 +218,7 @@ export default declare((api, options) => {
         }
 
         path.insertBefore(computedNodes);
-        path.insertAfter(afterNodes);
+        path.insertAfter(staticNodes);
       },
     },
   };

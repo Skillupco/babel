@@ -1489,11 +1489,14 @@ export default (superClass: Class<Parser>): Class<Parser> =>
       }
     }
 
+    isAbstractClass(): boolean {
+      return (
+        this.isContextual("abstract") && this.lookahead().type === tt._class
+      );
+    }
+
     parseExportDefaultExpression(): N.Expression | N.Declaration {
-      if (
-        this.isContextual("abstract") &&
-        this.lookahead().type === tt._class
-      ) {
+      if (this.isAbstractClass()) {
         const cls = this.startNode();
         this.next(); // Skip "abstract"
         this.parseClass(cls, true, true);
@@ -1938,6 +1941,8 @@ export default (superClass: Class<Parser>): Class<Parser> =>
         case "TSParameterProperty":
           return super.toAssignable(node, isBinding, contextDescription);
         case "TSAsExpression":
+        case "TSNonNullExpression":
+        case "TSTypeAssertion":
           node.expression = this.toAssignable(
             node.expression,
             isBinding,
@@ -1970,6 +1975,8 @@ export default (superClass: Class<Parser>): Class<Parser> =>
           );
           return;
         case "TSAsExpression":
+        case "TSNonNullExpression":
+        case "TSTypeAssertion":
           this.checkLVal(
             expr.expression,
             isBinding,
@@ -2083,5 +2090,10 @@ export default (superClass: Class<Parser>): Class<Parser> =>
 
     shouldParseAsyncArrow(): boolean {
       return this.match(tt.colon) || super.shouldParseAsyncArrow();
+    }
+
+    canHaveLeadingDecorator() {
+      // Avoid unnecessary lookahead in checking for abstract class unless needed!
+      return super.canHaveLeadingDecorator() || this.isAbstractClass();
     }
   };

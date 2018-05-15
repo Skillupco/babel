@@ -11,11 +11,8 @@ import * as util from "./util";
 let compiledFiles = 0;
 
 export default function(commander, filenames, opts) {
-  function write(src, relative, base, callback) {
-    if (typeof base === "function") {
-      callback = base;
-      base = undefined;
-    }
+  function write(src, base, callback) {
+    let relative = path.relative(base, src);
     if (!util.isCompilableExtension(relative, commander.extensions)) {
       return process.nextTick(callback);
     }
@@ -72,15 +69,11 @@ export default function(commander, filenames, opts) {
     }
   }
 
-  function handleFile(src, filename, base, callback) {
-    if (typeof base === "function") {
-      callback = base;
-      base = undefined;
-    }
-
-    write(src, filename, base, function(err, res) {
+  function handleFile(src, base, callback) {
+    write(src, base, function(err, res) {
       if (err) return callback(err);
       if (!res && commander.copyFiles) {
+        const filename = path.relative(base, src);
         const dest = getDest(commander, filename, base);
         outputFileSync(dest, fs.readFileSync(src));
         util.chmod(src, dest);
@@ -104,7 +97,7 @@ export default function(commander, filenames, opts) {
     const filename = files[index];
     const src = path.join(dirname, filename);
 
-    handleFile(src, filename, dirname, function(err) {
+    handleFile(src, dirname, function(err) {
       if (err) return callback(err);
       index++;
       if (index !== files.length) {
@@ -142,12 +135,7 @@ export default function(commander, filenames, opts) {
         .filter(filterFiles);
       sequentialHandleFile(files, dirname, callback);
     } else {
-      write(
-        filename,
-        path.basename(filename),
-        path.dirname(filename),
-        callback,
-      );
+      write(filename, path.dirname(filename), callback);
     }
   }
 
@@ -177,8 +165,8 @@ export default function(commander, filenames, opts) {
   if (commander.watch) {
     const chokidar = util.requireChokidar();
 
-    filenames.forEach(function(dirname) {
-      const watcher = chokidar.watch(dirname, {
+    filenames.forEach(function(filenameOrDir) {
+      const watcher = chokidar.watch(filenameOrDir, {
         persistent: true,
         ignoreInitial: true,
         ignored: opts.ignore,
@@ -190,14 +178,15 @@ export default function(commander, filenames, opts) {
 
       ["add", "change"].forEach(function(type) {
         watcher.on(type, function(filename) {
-          const relative = path.relative(dirname, filename) || filename;
-          try {
-            handleFile(filename, relative, function(err) {
-              if (err) throw err;
-            });
-          } catch (err) {
-            console.error(err.stack);
-          }
+          handleFile(
+            filename,
+            filename === filenameOrDir
+              ? path.dirname(filenameOrDir)
+              : filenameOrDir,
+            function(err) {
+              if (err) console.error(err.stack);
+            },
+          );
         });
       });
     });

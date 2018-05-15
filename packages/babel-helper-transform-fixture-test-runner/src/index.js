@@ -33,7 +33,9 @@ testContext.global = testContext;
 runModuleInTestContext("@babel/polyfill", __filename);
 
 // Populate the "babelHelpers" global with Babel's helper utilities.
-runCodeInTestContext(buildExternalHelpers());
+runCodeInTestContext(buildExternalHelpers(), {
+  filename: path.join(__dirname, "babel-helpers-in-memory.js"),
+});
 
 /**
  * A basic implementation of CommonJS so we can execute `@babel/polyfill` inside our test context.
@@ -75,27 +77,31 @@ function runModuleInTestContext(id: string, relativeFilename: string) {
  *
  * Exposed for unit tests, not for use as an API.
  */
-export function runCodeInTestContext(
-  code: string,
-  opts: { filename?: string } = {},
-) {
-  const filename = opts.filename || null;
-  const dirname = filename ? path.dirname(filename) : null;
-  const req = filename ? id => runModuleInTestContext(id, filename) : null;
+export function runCodeInTestContext(code: string, opts: { filename: string }) {
+  const filename = opts.filename;
+  const dirname = path.dirname(filename);
+  const req = id => runModuleInTestContext(id, filename);
 
   const module = {
     id: filename,
     exports: {},
   };
 
-  // Expose the test options as "opts", but otherwise run the test in a CommonJS-like environment.
-  // Note: This isn't doing .call(module.exports, ...) because some of our tests currently
-  // rely on 'this === global'.
-  const src = `(function(exports, require, module, __filename, __dirname, opts) {${code}\n});`;
-  return vm.runInContext(src, testContext, {
-    filename,
-    displayErrors: true,
-  })(module.exports, req, module, filename, dirname, opts);
+  const oldCwd = process.cwd();
+  try {
+    if (opts.filename) process.chdir(path.dirname(opts.filename));
+
+    // Expose the test options as "opts", but otherwise run the test in a CommonJS-like environment.
+    // Note: This isn't doing .call(module.exports, ...) because some of our tests currently
+    // rely on 'this === global'.
+    const src = `(function(exports, require, module, __filename, __dirname, opts) {${code}\n});`;
+    return vm.runInContext(src, testContext, {
+      filename,
+      displayErrors: true,
+    })(module.exports, req, module, filename, dirname, opts);
+  } finally {
+    process.chdir(oldCwd);
+  }
 }
 
 function wrapPackagesArray(type, names, optionsDir) {
@@ -320,11 +326,13 @@ function run(task) {
   function getOpts(self) {
     const newOpts = merge(
       {
+        cwd: path.dirname(self.filename),
         filename: self.loc,
         filenameRelative: self.filename,
         sourceFileName: self.filename,
         sourceType: "script",
         babelrc: false,
+        inputSourceMap: task.inputSourceMap || undefined,
       },
       opts,
     );

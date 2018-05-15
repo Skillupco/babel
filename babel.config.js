@@ -12,15 +12,20 @@ module.exports = function(api) {
   };
 
   let convertESM = true;
+  let ignoreLib = true;
 
   switch (env) {
     // Configs used during bundling builds.
     case "babylon":
     case "standalone":
       convertESM = false;
+      ignoreLib = false;
       break;
     case "production":
       // Config during builds before publish.
+      envOpts.targets = {
+        node: 6,
+      };
       break;
     case "development":
       envOpts.debug = true;
@@ -37,6 +42,15 @@ module.exports = function(api) {
 
   const config = {
     comments: false,
+    ignore: [
+      // These may not be strictly necessary with the newly-limited scope of
+      // babelrc searching, but including them for now because we had them
+      // in our .babelignore before.
+      "packages/*/test/fixtures",
+      ignoreLib ? "packages/*/lib" : null,
+      "packages/babel-standalone/babel.js",
+      "packages/babel-preset-env-standalone/babel-preset-env.js",
+    ].filter(Boolean),
     presets: [["@babel/env", envOpts]],
     plugins: [
       // TODO: Use @babel/preset-flow when
@@ -45,7 +59,10 @@ module.exports = function(api) {
       ["@babel/proposal-class-properties", { loose: true }],
       "@babel/proposal-export-namespace-from",
       "@babel/proposal-numeric-separator",
-      ["@babel/proposal-object-rest-spread", { useBuiltIns: true }],
+      [
+        "@babel/proposal-object-rest-spread",
+        { useBuiltIns: true, loose: true },
+      ],
 
       // Explicitly use the lazy version of CommonJS modules.
       convertESM ? ["@babel/transform-modules-commonjs", { lazy: true }] : null,

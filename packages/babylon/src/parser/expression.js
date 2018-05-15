@@ -310,8 +310,16 @@ export default class ExpressionParser extends LValParser {
         const startLoc = this.state.startLoc;
 
         if (op === tt.pipeline) {
-          // Support syntax such as 10 |> x => x + 1
-          this.state.potentialArrowAt = startPos;
+          if (
+            this.match(tt.name) &&
+            this.state.value === "await" &&
+            this.state.inAsync
+          ) {
+            throw this.raise(
+              this.state.start,
+              `Unexpected "await" after pipeline body; await must have parentheses in minimal proposal`,
+            );
+          }
         }
 
         node.right = this.parseExprOp(
@@ -1265,7 +1273,7 @@ export default class ExpressionParser extends LValParser {
       }
 
       if (this.match(tt.at)) {
-        if (this.hasPlugin("decorators2")) {
+        if (this.hasPlugin("decorators")) {
           this.raise(
             this.state.start,
             "Stage 2 decorators disallow object literal property decorators",

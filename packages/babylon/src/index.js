@@ -19,7 +19,9 @@ plugins.typescript = typescriptPlugin;
 
 export function parse(input: string, options?: Options): File {
   if (options && options.sourceType === "unambiguous") {
-    options = Object.assign({}, options);
+    options = {
+      ...options,
+    };
     try {
       options.sourceType = "module";
       const parser = getParser(options, input);
@@ -65,8 +67,8 @@ function getParserClass(
   pluginsFromOptions: $ReadOnlyArray<string>,
 ): Class<Parser> {
   if (
-    pluginsFromOptions.indexOf("decorators") >= 0 &&
-    pluginsFromOptions.indexOf("decorators2") >= 0
+    pluginsFromOptions.indexOf("decorators-legacy") >= 0 &&
+    pluginsFromOptions.indexOf("decorators") >= 0
   ) {
     throw new Error("Cannot use decorators and decorators2 plugin together");
   }
