@@ -105,11 +105,12 @@ defineType("OptionalCallExpression", {
     optional: {
       validate: assertValueType("boolean"),
     },
+    typeArguments: {
+      validate: assertNodeType("TypeParameterInstantiation"),
+      optional: true,
+    },
     typeParameters: {
-      validate: assertNodeType(
-        "TypeParameterInstantiation",
-        "TSTypeParameterInstantiation",
-      ),
+      validate: assertNodeType("TSTypeParameterInstantiation"),
       optional: true,
     },
   },
@@ -188,4 +189,14 @@ defineType("PrivateName", {
       validate: assertNodeType("Identifier"),
     },
   },
+});
+
+defineType("BigIntLiteral", {
+  builder: ["value"],
+  fields: {
+    value: {
+      validate: assertValueType("string"),
+    },
+  },
+  aliases: ["Expression", "Pureish", "Literal", "Immutable"],
 });

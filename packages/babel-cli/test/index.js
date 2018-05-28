@@ -1,4 +1,3 @@
-const includes = require("lodash/includes");
 const readdir = require("fs-readdir-recursive");
 const helper = require("@babel/helper-fixtures");
 const rimraf = require("rimraf");
@@ -37,7 +36,9 @@ const readDir = function(loc, filter) {
 
 const saveInFiles = function(files) {
   // Place an empty .babelrc in each test so tests won't unexpectedly get to repo-level config.
-  outputFileSync(".babelrc", "{}");
+  if (!fs.existsSync(".babelrc")) {
+    outputFileSync(".babelrc", "{}");
+  }
 
   Object.keys(files).forEach(function(filename) {
     const content = files[filename];
@@ -45,13 +46,26 @@ const saveInFiles = function(files) {
   });
 };
 
-const assertTest = function(stdout, stderr, opts) {
+const replacePaths = function(str, cwd) {
+  let prev;
+  do {
+    prev = str;
+    str = str.replace(cwd, "<CWD>");
+  } while (str !== prev);
+
+  return str;
+};
+
+const assertTest = function(stdout, stderr, opts, cwd) {
+  stdout = replacePaths(stdout, cwd);
+  stderr = replacePaths(stderr, cwd);
+
   const expectStderr = opts.stderr.trim();
   stderr = stderr.trim();
 
   if (opts.stderr) {
     if (opts.stderrContains) {
-      expect(includes(stderr, expectStderr)).toBe(true);
+      expect(stderr).toContain(expectStderr);
     } else {
       expect(stderr).toBe(expectStderr);
     }
@@ -65,7 +79,7 @@ const assertTest = function(stdout, stderr, opts) {
 
   if (opts.stdout) {
     if (opts.stdoutContains) {
-      expect(includes(stdout, expectStdout)).toBe(true);
+      expect(stdout).toContain(expectStdout);
     } else {
       expect(stdout).toBe(expectStdout);
     }
@@ -137,7 +151,7 @@ const buildTest = function(binName, testName, opts) {
       let err;
 
       try {
-        assertTest(stdout, stderr, opts);
+        assertTest(stdout, stderr, opts, tmpLoc);
       } catch (e) {
         err = e;
       }
