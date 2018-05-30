@@ -94,11 +94,11 @@ export default async function({ cliOptions, babelOptions }) {
 
   function filterFiles(filename) {
     const ignoreMatchs =
-      cliOptions.ignore &&
-      cliOptions.ignore.map(path => {
+      babelOptions.ignore &&
+      babelOptions.ignore.map(path => {
         return isGlob(path) ? path : `${path}/**`;
       });
-    if (cliOptions.ignore && anymatch(ignoreMatchs, filename)) return false;
+    if (babelOptions.ignore && anymatch(ignoreMatchs, filename)) return false;
     return true;
   }
 
@@ -157,7 +157,7 @@ export default async function({ cliOptions, babelOptions }) {
       const watcher = chokidar.watch(filenameOrDir, {
         persistent: true,
         ignoreInitial: true,
-        ignored: cliOptions.ignore,
+        ignored: babelOptions.ignore,
         awaitWriteFinish: {
           stabilityThreshold: 50,
           pollInterval: 10,
