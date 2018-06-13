@@ -19,6 +19,35 @@ describe("getTargets", () => {
     });
   });
 
+  describe("validation", () => {
+    it("throws on invalid target name", () => {
+      const invalidTargetName = () => {
+        getTargets({
+          unknown: "unknown",
+        });
+      };
+      expect(invalidTargetName).toThrow();
+    });
+
+    it("throws on invalid browsers target", () => {
+      const invalidBrowsersTarget = () => {
+        getTargets({
+          browsers: 59,
+        });
+      };
+      expect(invalidBrowsersTarget).toThrow();
+    });
+
+    it("throws on invalid target version", () => {
+      const invalidTargetVersion = () => {
+        getTargets({
+          chrome: "unknown",
+        });
+      };
+      expect(invalidTargetVersion).toThrow();
+    });
+  });
+
   describe("browser", () => {
     it("merges browser key targets", () => {
       expect(
@@ -46,6 +75,16 @@ describe("getTargets", () => {
       });
     });
 
+    it("prefers released version over TP", () => {
+      expect(
+        getTargets({
+          browsers: "safari tp, safari 11",
+        }),
+      ).toEqual({
+        safari: "11.0.0",
+      });
+    });
+
     it("returns TP version in lower case", () => {
       expect(
         getTargets({
@@ -56,18 +95,23 @@ describe("getTargets", () => {
       });
     });
 
-    it("ignores invalid", () => {
+    it("works with android", () => {
       expect(
         getTargets({
-          browsers: 59,
-          chrome: "49",
-          firefox: "55",
-          ie: "11",
+          browsers: "Android 4",
         }),
       ).toEqual({
-        chrome: "49.0.0",
-        firefox: "55.0.0",
-        ie: "11.0.0",
+        android: "4.0.0",
+      });
+    });
+
+    it("works with inequalities", () => {
+      expect(
+        getTargets({
+          browsers: "Android >= 4",
+        }),
+      ).toEqual({
+        android: "4.0.0",
       });
     });
   });

@@ -277,7 +277,12 @@ export default declare((api, options) => {
           }
 
           if (path.isClassPrivateProperty()) {
-            const { static: isStatic, key: { id: { name } } } = path.node;
+            const {
+              static: isStatic,
+              key: {
+                id: { name },
+              },
+            } = path.node;
 
             if (isStatic) {
               throw path.buildCodeFrameError(
@@ -314,14 +319,15 @@ export default declare((api, options) => {
         const instanceBody = [];
 
         for (const computedPath of computedPaths) {
+          computedPath.traverse(classFieldDefinitionEvaluationTDZVisitor, {
+            classRef: path.scope.getBinding(ref.name),
+            file: this.file,
+          });
+
           const computedNode = computedPath.node;
           // Make sure computed property names are only evaluated once (upon class definition)
           // and in the right order in combination with static properties
           if (!computedPath.get("key").isConstantExpression()) {
-            computedPath.traverse(classFieldDefinitionEvaluationTDZVisitor, {
-              classRef: path.scope.getBinding(ref.name),
-              file: this.file,
-            });
             const ident = path.scope.generateUidIdentifierBasedOnNode(
               computedNode.key,
             );
@@ -374,7 +380,7 @@ export default declare((api, options) => {
             if (isDerived) {
               newConstructor.params = [t.restElement(t.identifier("args"))];
               newConstructor.body.body.push(
-                t.returnStatement(
+                t.expressionStatement(
                   t.callExpression(t.super(), [
                     t.spreadElement(t.identifier("args")),
                   ]),

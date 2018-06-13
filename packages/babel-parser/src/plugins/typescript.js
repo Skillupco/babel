@@ -79,6 +79,7 @@ export default (superClass: Class<Parser>): Class<Parser> =>
       return (
         !this.hasPrecedingLineBreak() &&
         !this.match(tt.parenL) &&
+        !this.match(tt.parenR) &&
         !this.match(tt.colon) &&
         !this.match(tt.eq) &&
         !this.match(tt.question)
@@ -1327,7 +1328,9 @@ export default (superClass: Class<Parser>): Class<Parser> =>
       const bodilessType =
         type === "FunctionDeclaration"
           ? "TSDeclareFunction"
-          : type === "ClassMethod" ? "TSDeclareMethod" : undefined;
+          : type === "ClassMethod"
+            ? "TSDeclareMethod"
+            : undefined;
       if (bodilessType && !this.match(tt.braceL) && this.isLineTerminator()) {
         this.finishNode(node, bodilessType);
         return;
