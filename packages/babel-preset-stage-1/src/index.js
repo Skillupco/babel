@@ -4,14 +4,21 @@ import presetStage2 from "@babel/preset-stage-2";
 import transformExportDefaultFrom from "@babel/plugin-proposal-export-default-from";
 import transformLogicalAssignmentOperators from "@babel/plugin-proposal-logical-assignment-operators";
 import transformOptionalChaining from "@babel/plugin-proposal-optional-chaining";
-import transformPipelineOperator from "@babel/plugin-proposal-pipeline-operator";
+import transformPipelineOperator, {
+  proposals,
+} from "@babel/plugin-proposal-pipeline-operator";
 import transformNullishCoalescingOperator from "@babel/plugin-proposal-nullish-coalescing-operator";
 import transformDoExpressions from "@babel/plugin-proposal-do-expressions";
 
 export default declare((api, opts = {}) => {
   api.assertVersion(7);
 
-  const { loose = false, useBuiltIns = false, decoratorsLegacy = false } = opts;
+  const {
+    loose = false,
+    useBuiltIns = false,
+    decoratorsLegacy = false,
+    pipelineProposal,
+  } = opts;
 
   if (typeof loose !== "boolean") {
     throw new Error("@babel/preset-stage-1 'loose' option must be a boolean.");
@@ -35,13 +42,22 @@ export default declare((api, opts = {}) => {
     );
   }
 
+  if (typeof pipelineProposal !== "string") {
+    throw new Error(
+      "The pipeline operator requires a proposal set." +
+        " You must pass 'pipelineProposal' option to" +
+        " @babel/preset-stage-1 whose value must be one of: " +
+        proposals.join(", "),
+    );
+  }
+
   return {
     presets: [[presetStage2, { loose, useBuiltIns, decoratorsLegacy }]],
     plugins: [
       transformExportDefaultFrom,
       transformLogicalAssignmentOperators,
       [transformOptionalChaining, { loose }],
-      transformPipelineOperator,
+      [transformPipelineOperator, { proposal: pipelineProposal }],
       [transformNullishCoalescingOperator, { loose }],
       transformDoExpressions,
     ],

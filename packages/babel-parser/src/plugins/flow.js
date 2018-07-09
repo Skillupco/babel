@@ -1811,7 +1811,10 @@ export default (superClass: Class<Parser>): Class<Parser> =>
     // ensure that inside flow types, we bypass the jsx parser plugin
     readToken(code: number): void {
       const next = this.input.charCodeAt(this.state.pos + 1);
-      if (this.state.inType && (code === 62 || code === 60)) {
+      if (
+        this.state.inType &&
+        (code === charCodes.greaterThan || code === charCodes.lessThan)
+      ) {
         return this.finishOp(tt.relational, 1);
       } else if (isIteratorStart(code, next)) {
         this.state.isIterator = true;
@@ -2606,7 +2609,7 @@ export default (superClass: Class<Parser>): Class<Parser> =>
       if (this.input.slice(this.state.pos + 2, 14) === "flow-include") {
         return 14; // check for /*flow-include
       }
-      if (ch2 === charCodes.colon && ch3 !== charCodes.colon && 2) {
+      if (ch2 === charCodes.colon && ch3 !== charCodes.colon) {
         return 2; // check for /*:, advance only 2 steps
       }
       return false;

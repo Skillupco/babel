@@ -2,18 +2,18 @@
 
 > Allow parsing of decorators
 
-See our website [@babel/plugin-syntax-decorators](https://new.babeljs.io/docs/en/next/babel-plugin-syntax-decorators.html) for more information.
+See our website [@babel/plugin-syntax-decorators](https://babeljs.io/docs/en/next/babel-plugin-syntax-decorators.html) for more information.
 
 ## Install
 
 Using npm:
 
 ```sh
-npm install --save @babel/plugin-syntax-decorators
+npm install --save-dev @babel/plugin-syntax-decorators
 ```
 
 or using yarn:
 
 ```sh
-yarn add --save @babel/plugin-syntax-decorators
+yarn add @babel/plugin-syntax-decorators --dev
 ```

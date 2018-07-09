@@ -2,18 +2,18 @@
 
 > Babel preset for all es2015 plugins.
 
-See our website [@babel/preset-es2015](https://new.babeljs.io/docs/en/next/babel-preset-es2015.html) for more information.
+See our website [@babel/preset-es2015](https://babeljs.io/docs/en/next/babel-preset-es2015.html) for more information.
 
 ## Install
 
 Using npm:
 
 ```sh
-npm install --save @babel/preset-es2015
+npm install --save-dev @babel/preset-es2015
 ```
 
 or using yarn:
 
 ```sh
-yarn add --save @babel/preset-es2015
+yarn add @babel/preset-es2015 --dev
 ```

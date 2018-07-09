@@ -2,18 +2,18 @@
 
 > Babel preset for stage 3 plugins
 
-See our website [@babel/preset-stage-3](https://new.babeljs.io/docs/en/next/babel-preset-stage-3.html) for more information.
+See our website [@babel/preset-stage-3](https://babeljs.io/docs/en/next/babel-preset-stage-3.html) for more information.
 
 ## Install
 
 Using npm:
 
 ```sh
-npm install --save @babel/preset-stage-3
+npm install --save-dev @babel/preset-stage-3
 ```
 
 or using yarn:
 
 ```sh
-yarn add --save @babel/preset-stage-3
+yarn add @babel/preset-stage-3 --dev
 ```

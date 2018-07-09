@@ -1,5 +1,6 @@
 import defaults from "lodash/defaults";
 import outputFileSync from "output-file-sync";
+import { sync as mkdirpSync } from "mkdirp";
 import slash from "slash";
 import path from "path";
 import fs from "fs";
@@ -73,19 +74,6 @@ export default async function({ cliOptions, babelOptions }) {
     return path.join(cliOptions.outDir, filename);
   }
 
-  function outputDestFolder(outDir) {
-    const outDirPath = path.resolve(outDir);
-
-    try {
-      fs.mkdirSync(outDirPath);
-    } catch (err) {
-      // Testing for the directory and then creating it can lead to race
-      // conditions if there are multiple processes, so we try to create it
-      // and bail if it already exists.
-      if (err.code !== "EEXIST") throw err;
-    }
-  }
-
   async function handleFile(src, base) {
     const written = await write(src, base);
 
@@ -142,7 +130,7 @@ export default async function({ cliOptions, babelOptions }) {
       util.deleteDir(cliOptions.outDir);
     }
 
-    outputDestFolder(cliOptions.outDir);
+    mkdirpSync(cliOptions.outDir);
 
     let compiledFiles = 0;
     for (const filename of cliOptions.filenames) {
@@ -150,7 +138,7 @@ export default async function({ cliOptions, babelOptions }) {
     }
 
     console.log(
-      `🎉  Successfully compiled ${compiledFiles} ${
+      `Successfully compiled ${compiledFiles} ${
         compiledFiles !== 1 ? "files" : "file"
       } with Babel.`,
     );
