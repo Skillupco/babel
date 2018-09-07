@@ -32,6 +32,8 @@ function () {
 
   return A;
 }()), _temp), (_descriptor = _applyDecoratedDescriptor(_class.prototype, "a", [dec], {
+  configurable: true,
   enumerable: true,
+  writable: true,
   initializer: null
 })), _class);

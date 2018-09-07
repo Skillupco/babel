@@ -160,6 +160,33 @@ export default declare((api, options) => {
     },
   };
 
+  const staticPrivatePropertyHandlerSpec = {
+    ...privateNameHandlerSpec,
+
+    get(member) {
+      const { file, privateId, classRef } = this;
+
+      return t.callExpression(
+        file.addHelper("classStaticPrivateFieldSpecGet"),
+        [this.receiver(member), t.cloneNode(classRef), t.cloneNode(privateId)],
+      );
+    },
+
+    set(member, value) {
+      const { file, privateId, classRef } = this;
+
+      return t.callExpression(
+        file.addHelper("classStaticPrivateFieldSpecSet"),
+        [
+          this.receiver(member),
+          t.cloneNode(classRef),
+          t.cloneNode(privateId),
+          value,
+        ],
+      );
+    },
+  };
+
   function buildClassPropertySpec(ref, path, state) {
     const { scope } = path;
     const { key, value, computed } = path.node;
@@ -218,7 +245,7 @@ export default declare((api, options) => {
       });
   }
 
-  function buildClassPrivatePropertyLoose(ref, path, initNodes, state) {
+  function buildClassPrivatePropertyLooseHelper(ref, path, state) {
     const { parentPath, scope } = path;
     const { name } = path.node.key.id;
 
@@ -231,28 +258,69 @@ export default declare((api, options) => {
       ...privateNameHandlerLoose,
     });
 
-    initNodes.push(
-      template.statement`var PROP = HELPER(NAME);`({
+    return {
+      keyDecl: template.statement`var PROP = HELPER(NAME);`({
         PROP: prop,
         HELPER: state.addHelper("classPrivateFieldLooseKey"),
         NAME: t.stringLiteral(name),
       }),
+      // Must be late evaluated in case it references another private field.
+      buildInit: () =>
+        template.statement.ast`
+          Object.defineProperty(${ref}, ${prop}, {
+            // configurable is false by default
+            // enumerable is false by default
+            writable: true,
+            value: ${path.node.value || scope.buildUndefinedNode()}
+          });
+        `,
+    };
+  }
+
+  function buildClassInstancePrivatePropertyLoose(ref, path, initNodes, state) {
+    const { keyDecl, buildInit } = buildClassPrivatePropertyLooseHelper(
+      ref,
+      path,
+      state,
     );
 
-    // Must be late evaluated in case it references another private field.
-    return () =>
-      template.statement`
-      Object.defineProperty(REF, PROP, {
-        // configurable is false by default
-        // enumerable is false by default
-        writable: true,
-        value: VALUE
-      });
-    `({
-        REF: ref,
-        PROP: prop,
-        VALUE: path.node.value || scope.buildUndefinedNode(),
-      });
+    initNodes.push(keyDecl);
+    return buildInit;
+  }
+
+  function buildClassStaticPrivatePropertyLoose(ref, path, state) {
+    const { keyDecl, buildInit } = buildClassPrivatePropertyLooseHelper(
+      ref,
+      path,
+      state,
+    );
+
+    return [keyDecl, buildInit()];
+  }
+
+  function buildClassStaticPrivatePropertySpec(ref, path, state) {
+    const { parentPath, scope } = path;
+    const { name } = path.node.key.id;
+
+    const privateId = scope.generateUidIdentifier(name);
+    memberExpressionToFunctions(parentPath, privateNameVisitor, {
+      name,
+      privateId,
+      classRef: ref,
+      file: state,
+      ...staticPrivatePropertyHandlerSpec,
+    });
+
+    return [
+      template.statement.ast`
+        var ${privateId} = {
+          // configurable is always false for private elements
+          // enumerable is always false for private elements
+          writable: true,
+          value: ${path.node.value || scope.buildUndefinedNode()}
+        }
+      `,
+    ];
   }
 
   const buildClassProperty = loose
@@ -260,8 +328,12 @@ export default declare((api, options) => {
     : buildClassPropertySpec;
 
   const buildClassPrivateProperty = loose
-    ? buildClassPrivatePropertyLoose
+    ? buildClassInstancePrivatePropertyLoose
     : buildClassPrivatePropertySpec;
+
+  const buildClassStaticPrivateProperty = loose
+    ? buildClassStaticPrivatePropertyLoose
+    : buildClassStaticPrivatePropertySpec;
 
   return {
     inherits: syntaxClassProperties,
@@ -288,17 +360,11 @@ export default declare((api, options) => {
 
           if (path.isClassPrivateProperty()) {
             const {
-              static: isStatic,
               key: {
                 id: { name },
               },
             } = path.node;
 
-            if (isStatic) {
-              throw path.buildCodeFrameError(
-                "Static class fields are not spec'ed yet.",
-              );
-            }
             if (privateNames.has(name)) {
               throw path.buildCodeFrameError("Duplicate private field");
             }
@@ -354,7 +420,7 @@ export default declare((api, options) => {
         const privateMaps = [];
         const privateMapInits = [];
         for (const prop of props) {
-          if (prop.isPrivate()) {
+          if (prop.isPrivate() && !prop.node.static) {
             const inits = [];
             privateMapInits.push(inits);
 
@@ -363,11 +429,22 @@ export default declare((api, options) => {
             );
           }
         }
-
         let p = 0;
         for (const prop of props) {
           if (prop.node.static) {
-            staticNodes.push(buildClassProperty(t.cloneNode(ref), prop, state));
+            if (prop.isPrivate()) {
+              staticNodes.push(
+                ...buildClassStaticPrivateProperty(
+                  t.cloneNode(ref),
+                  prop,
+                  state,
+                ),
+              );
+            } else {
+              staticNodes.push(
+                buildClassProperty(t.cloneNode(ref), prop, state),
+              );
+            }
           } else if (prop.isPrivate()) {
             instanceBody.push(privateMaps[p]());
             staticNodes.push(...privateMapInits[p]);

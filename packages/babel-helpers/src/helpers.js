@@ -483,6 +483,8 @@ helpers.construct = helper("7.0.0-beta.0")`
     if (isNativeReflectConstruct()) {
       _construct = Reflect.construct;
     } else {
+      // NOTE: If Parent !== Class, the correct __proto__ is set *after*
+      //       calling the constructor.
       _construct = function _construct(Parent, args, Class) {
         var a = [null];
         a.push.apply(a, args);
@@ -498,17 +500,25 @@ helpers.construct = helper("7.0.0-beta.0")`
   }
 `;
 
+helpers.isNativeFunction = helper("7.0.0-beta.0")`
+  export default function _isNativeFunction(fn) {
+    // Note: This function returns "true" for core-js functions.
+    return Function.toString.call(fn).indexOf("[native code]") !== -1;
+  }
+`;
+
 // Based on https://github.com/WebReflection/babel-plugin-transform-builtin-classes
 helpers.wrapNativeSuper = helper("7.0.0-beta.0")`
   import getPrototypeOf from "getPrototypeOf";
   import setPrototypeOf from "setPrototypeOf";
+  import isNativeFunction from "isNativeFunction";
   import construct from "construct";
 
   export default function _wrapNativeSuper(Class) {
     var _cache = typeof Map === "function" ? new Map() : undefined;
 
     _wrapNativeSuper = function _wrapNativeSuper(Class) {
-      if (Class === null) return null;
+      if (Class === null || !isNativeFunction(Class)) return Class;
       if (typeof Class !== "function") {
         throw new TypeError("Super expression must either be null or a function");
       }
@@ -1033,6 +1043,31 @@ helpers.classPrivateFieldSet = helper("7.0.0-beta.0")`
       throw new TypeError("attempted to set private field on non-instance");
     }
     var descriptor = privateMap.get(receiver);
+    if (!descriptor.writable) {
+      // This should only throw in strict mode, but class bodies are
+      // always strict and private fields can only be used inside
+      // class bodies.
+      throw new TypeError("attempted to set read only private field");
+    }
+    descriptor.value = value;
+    return value;
+  }
+`;
+
+helpers.classStaticPrivateFieldSpecGet = helper("7.0.1")`
+  export default function _classStaticPrivateFieldSpecGet(receiver, classConstructor, descriptor) {
+    if (receiver !== classConstructor) {
+      throw new TypeError("Private static access of wrong provenance");
+    }
+    return descriptor.value;
+  }
+`;
+
+helpers.classStaticPrivateFieldSpecSet = helper("7.0.1")`
+  export default function _classStaticPrivateFieldSpecSet(receiver, classConstructor, descriptor, value) {
+    if (receiver !== classConstructor) {
+      throw new TypeError("Private static access of wrong provenance");
+    }
     if (!descriptor.writable) {
       // This should only throw in strict mode, but class bodies are
       // always strict and private fields can only be used inside
