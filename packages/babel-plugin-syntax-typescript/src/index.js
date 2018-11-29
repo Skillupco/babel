@@ -19,6 +19,8 @@ export default declare((api, { isTSX }) => {
   api.assertVersion(7);
 
   return {
+    name: "syntax-typescript",
+
     manipulateOptions(opts, parserOpts) {
       const { plugins } = parserOpts;
       // If the Flow syntax plugin already ran, remove it since Typescript
@@ -31,8 +33,9 @@ export default declare((api, { isTSX }) => {
 
       parserOpts.plugins.push(
         "typescript",
-        "objectRestSpread",
         "classProperties",
+        // TODO: This is enabled by default now, remove in Babel 8
+        "objectRestSpread",
       );
 
       if (isTSX) {

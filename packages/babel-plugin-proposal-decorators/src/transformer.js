@@ -82,8 +82,8 @@ function getSingleElementDefinition(path, superRef, classRef, file) {
     isMethod
       ? value(node.body, node.params, node.async, node.generator)
       : node.value
-        ? value(template.ast`{ return ${node.value} }`)
-        : prop("value", scope.buildUndefinedNode()),
+      ? value(template.ast`{ return ${node.value} }`)
+      : prop("value", scope.buildUndefinedNode()),
   ].filter(Boolean);
 
   return t.objectExpression(properties);
@@ -113,6 +113,10 @@ const bareSupersVisitor = {
   CallExpression(path, { initializeInstanceElements }) {
     if (path.get("callee").isSuper()) {
       path.insertAfter(t.cloneNode(initializeInstanceElements));
+
+      // Sometimes this path gets requeued (e.g. in (super(), foo)), and
+      // it leads to infinite recursion.
+      path.skip();
     }
   },
   Function(path) {

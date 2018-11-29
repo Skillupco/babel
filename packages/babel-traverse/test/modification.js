@@ -200,6 +200,32 @@ describe("modification", function() {
       );
     });
 
+    it("returns inserted path with nested JSXElement", function() {
+      const ast = parse("<div><span>foo</span></div>", {
+        plugins: ["jsx"],
+      });
+      let path;
+      traverse(ast, {
+        Program: function(_path) {
+          path = _path.get("body.0");
+        },
+        JSXElement: function(path) {
+          const tagName = path.node.openingElement.name.name;
+          if (tagName !== "span") return;
+          path.insertAfter(
+            t.JSXElement(
+              t.JSXOpeningElement(t.JSXIdentifier("div"), [], false),
+              t.JSXClosingElement(t.JSXIdentifier("div")),
+              [],
+            ),
+          );
+        },
+      });
+      expect(generateCode(path)).toBe(
+        "<div><span>foo</span><div></div></div>;",
+      );
+    });
+
     describe("when the parent is an export declaration inserts the node after", function() {
       it("the ExportNamedDeclaration", function() {
         const bodyPath = getPath("export function a() {}", {
@@ -209,7 +235,9 @@ describe("modification", function() {
         fnPath.insertAfter(t.identifier("x"));
 
         expect(bodyPath.get("body")).toHaveLength(2);
-        expect(bodyPath.get("body.1").node).toEqual(t.identifier("x"));
+        expect(bodyPath.get("body.1").node).toEqual(
+          t.expressionStatement(t.identifier("x")),
+        );
       });
 
       it("the ExportDefaultDeclaration, if a declaration is exported", function() {
@@ -220,7 +248,9 @@ describe("modification", function() {
         fnPath.insertAfter(t.identifier("x"));
 
         expect(bodyPath.get("body")).toHaveLength(2);
-        expect(bodyPath.get("body.1").node).toEqual(t.identifier("x"));
+        expect(bodyPath.get("body.1").node).toEqual(
+          t.expressionStatement(t.identifier("x")),
+        );
       });
 
       it("the exported expression", function() {

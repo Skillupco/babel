@@ -11,18 +11,18 @@ interface BaseComment {
   start: number;
   end: number;
   loc: SourceLocation;
-  type: "BlockComment" | "LineComment";
+  type: "CommentBlock" | "CommentLine";
 }
 
-export interface BlockComment extends BaseComment {
-  type: "BlockComment";
+export interface CommentBlock extends BaseComment {
+  type: "CommentBlock";
 }
 
-export interface LineComment extends BaseComment {
-  type: "LineComment";
+export interface CommentLine extends BaseComment {
+  type: "CommentLine";
 }
 
-export type Comment = BlockComment | LineComment;
+export type Comment = CommentBlock | CommentLine;
 
 export interface SourceLocation {
   start: {
@@ -110,6 +110,8 @@ for (let i = 0; i < t.TYPES.length; i++) {
   }(node: object, opts?: object | null): `;
 
   if (t.NODE_FIELDS[t.TYPES[i]]) {
+    decl += `node is ${t.TYPES[i]};`;
+  } else if (t.FLIPPED_ALIAS_KEYS[t.TYPES[i]]) {
     decl += `node is ${t.TYPES[i]};`;
   } else {
     decl += `boolean;`;

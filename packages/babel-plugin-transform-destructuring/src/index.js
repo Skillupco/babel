@@ -170,7 +170,8 @@ export default declare((api, options) => {
     pushObjectRest(pattern, objRef, spreadProp, spreadPropIndex) {
       // get all the keys that appear in this object before the current spread
 
-      let keys = [];
+      const keys = [];
+      let allLiteral = true;
 
       for (let i = 0; i < pattern.properties.length; i++) {
         const prop = pattern.properties[i];
@@ -182,11 +183,15 @@ export default declare((api, options) => {
         // ignore other spread properties
         if (t.isRestElement(prop)) continue;
 
-        let key = prop.key;
+        const key = prop.key;
         if (t.isIdentifier(key) && !prop.computed) {
-          key = t.stringLiteral(prop.key.name);
+          keys.push(t.stringLiteral(key.name));
+        } else if (t.isLiteral(key)) {
+          keys.push(t.stringLiteral(String(key.value)));
+        } else {
+          keys.push(t.cloneNode(key));
+          allLiteral = false;
         }
-        keys.push(t.cloneNode(key));
       }
 
       let value;
@@ -196,11 +201,18 @@ export default declare((api, options) => {
           t.cloneNode(objRef),
         ]);
       } else {
-        keys = t.arrayExpression(keys);
+        let keyExpression = t.arrayExpression(keys);
+
+        if (!allLiteral) {
+          keyExpression = t.callExpression(
+            t.memberExpression(keyExpression, t.identifier("map")),
+            [this.addHelper("toPropertyKey")],
+          );
+        }
 
         value = t.callExpression(
           this.addHelper(`objectWithoutProperties${loose ? "Loose" : ""}`),
-          [t.cloneNode(objRef), keys],
+          [t.cloneNode(objRef), keyExpression],
         );
       }
 
@@ -399,6 +411,8 @@ export default declare((api, options) => {
   }
 
   return {
+    name: "transform-destructuring",
+
     visitor: {
       ExportNamedDeclaration(path) {
         const declaration = path.get("declaration");
@@ -526,7 +540,12 @@ export default declare((api, options) => {
         destructuring.init(node.left, ref || node.right);
 
         if (ref) {
-          nodes.push(t.expressionStatement(t.cloneNode(ref)));
+          if (path.parentPath.isArrowFunctionExpression()) {
+            path.replaceWith(t.blockStatement([]));
+            nodes.push(t.returnStatement(t.cloneNode(ref)));
+          } else {
+            nodes.push(t.expressionStatement(t.cloneNode(ref)));
+          }
         }
 
         path.replaceWithMultiple(nodes);

@@ -213,6 +213,22 @@ defineType("TSTupleType", {
   },
 });
 
+defineType("TSOptionalType", {
+  aliases: ["TSType"],
+  visitor: ["typeAnnotation"],
+  fields: {
+    typeAnnotation: validateType("TSType"),
+  },
+});
+
+defineType("TSRestType", {
+  aliases: ["TSType"],
+  visitor: ["typeAnnotation"],
+  fields: {
+    typeAnnotation: validateType("TSType"),
+  },
+});
+
 const unionOrIntersection = {
   aliases: ["TSType"],
   visitor: ["types"],

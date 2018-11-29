@@ -314,13 +314,19 @@ export default (superClass: Class<Parser>): Class<Parser> =>
     }
 
     tsParseBindingListForSignature(): $ReadOnlyArray<
-      N.Identifier | N.RestElement,
+      N.Identifier | N.RestElement | N.ObjectPattern,
     > {
       return this.parseBindingList(tt.parenR).map(pattern => {
-        if (pattern.type !== "Identifier" && pattern.type !== "RestElement") {
+        if (
+          pattern.type !== "Identifier" &&
+          pattern.type !== "RestElement" &&
+          pattern.type !== "ObjectPattern"
+        ) {
           throw this.unexpected(
             pattern.start,
-            "Name in a signature must be an Identifier.",
+            `Name in a signature must be an Identifier or ObjectPattern, instead got ${
+              pattern.type
+            }`,
           );
         }
         return pattern;
@@ -503,11 +509,53 @@ export default (superClass: Class<Parser>): Class<Parser> =>
       const node: N.TsTupleType = this.startNode();
       node.elementTypes = this.tsParseBracketedList(
         "TupleElementTypes",
-        this.tsParseType.bind(this),
+        this.tsParseTupleElementType.bind(this),
         /* bracket */ true,
         /* skipFirstToken */ false,
       );
+
+      // Validate the elementTypes to ensure:
+      //   No mandatory elements may follow optional elements
+      //   If there's a rest element, it must be at the end of the tuple
+      let seenOptionalElement = false;
+      node.elementTypes.forEach((elementNode, i) => {
+        if (elementNode.type === "TSRestType") {
+          if (i !== node.elementTypes.length - 1) {
+            this.raise(
+              elementNode.start,
+              "A rest element must be last in a tuple type.",
+            );
+          }
+        } else if (elementNode.type === "TSOptionalType") {
+          seenOptionalElement = true;
+        } else if (seenOptionalElement) {
+          this.raise(
+            elementNode.start,
+            "A required element cannot follow an optional element.",
+          );
+        }
+      });
+
       return this.finishNode(node, "TSTupleType");
+    }
+
+    tsParseTupleElementType(): N.TsType {
+      // parses `...TsType[]`
+      if (this.match(tt.ellipsis)) {
+        const restNode: N.TsRestType = this.startNode();
+        this.next(); // skips ellipsis
+        restNode.typeAnnotation = this.tsParseType();
+        return this.finishNode(restNode, "TSRestType");
+      }
+
+      const type = this.tsParseType();
+      // parses `TsType?`
+      if (this.eat(tt.question)) {
+        const optionalTypeNode: N.TsOptionalType = this.startNodeAtNode(type);
+        optionalTypeNode.typeAnnotation = type;
+        return this.finishNode(optionalTypeNode, "TSOptionalType");
+      }
+      return type;
     }
 
     tsParseParenthesizedType(): N.TsParenthesizedType {
@@ -555,8 +603,8 @@ export default (superClass: Class<Parser>): Class<Parser> =>
           const type = this.match(tt._void)
             ? "TSVoidKeyword"
             : this.match(tt._null)
-              ? "TSNullKeyword"
-              : keywordTypeFromName(this.state.value);
+            ? "TSNullKeyword"
+            : keywordTypeFromName(this.state.value);
           if (type !== undefined && this.lookahead().type !== tt.dot) {
             const node: N.TsKeywordType = this.startNode();
             this.next();
@@ -649,8 +697,8 @@ export default (superClass: Class<Parser>): Class<Parser> =>
       return operator
         ? this.tsParseTypeOperator(operator)
         : this.isContextual("infer")
-          ? this.tsParseInferType()
-          : this.tsParseArrayTypeOrHigher();
+        ? this.tsParseInferType()
+        : this.tsParseArrayTypeOrHigher();
     }
 
     tsParseUnionOrIntersectionType(
@@ -705,6 +753,22 @@ export default (superClass: Class<Parser>): Class<Parser> =>
         this.next();
         return true;
       }
+
+      if (this.match(tt.braceL)) {
+        let braceStackCounter = 1;
+        this.next();
+
+        while (braceStackCounter > 0) {
+          if (this.match(tt.braceL)) {
+            ++braceStackCounter;
+          } else if (this.match(tt.braceR)) {
+            --braceStackCounter;
+          }
+          this.next();
+        }
+        return true;
+      }
+
       return false;
     }
 
@@ -866,7 +930,7 @@ export default (superClass: Class<Parser>): Class<Parser> =>
         node.extends = this.tsParseHeritageClause();
       }
       const body: N.TSInterfaceBody = this.startNode();
-      body.body = this.tsParseObjectTypeMembers();
+      body.body = this.tsInType(this.tsParseObjectTypeMembers.bind(this));
       node.body = this.finishNode(body, "TSInterfaceBody");
       return this.finishNode(node, "TSInterfaceDeclaration");
     }
@@ -1235,11 +1299,17 @@ export default (superClass: Class<Parser>): Class<Parser> =>
         return undefined;
       }
 
+      const oldInAsync = this.state.inAsync;
+      const oldInGenerator = this.state.inGenerator;
+      this.state.inAsync = true;
+      this.state.inGenerator = false;
       res.id = null;
       res.generator = false;
       res.expression = true; // May be set again by parseFunctionBody.
       res.async = true;
       this.parseFunctionBody(res, true);
+      this.state.inAsync = oldInAsync;
+      this.state.inGenerator = oldInGenerator;
       return this.finishNode(res, "ArrowFunctionExpression");
     }
 
@@ -1339,8 +1409,8 @@ export default (superClass: Class<Parser>): Class<Parser> =>
         type === "FunctionDeclaration"
           ? "TSDeclareFunction"
           : type === "ClassMethod"
-            ? "TSDeclareMethod"
-            : undefined;
+          ? "TSDeclareMethod"
+          : undefined;
       if (bodilessType && !this.match(tt.braceL) && this.isLineTerminator()) {
         this.finishNode(node, bodilessType);
         return;
@@ -1368,10 +1438,11 @@ export default (superClass: Class<Parser>): Class<Parser> =>
         return this.finishNode(nonNullExpression, "TSNonNullExpression");
       }
 
-      // There are number of things we are going to "maybe" parse, like type arguments on
-      // tagged template expressions. If any of them fail, walk it back and continue.
-      const result = this.tsTryParseAndCatch(() => {
-        if (this.isRelational("<")) {
+      if (this.isRelational("<")) {
+        // tsTryParseAndCatch is expensive, so avoid if not necessary.
+        // There are number of things we are going to "maybe" parse, like type arguments on
+        // tagged template expressions. If any of them fail, walk it back and continue.
+        const result = this.tsTryParseAndCatch(() => {
           if (!noCalls && this.atPossibleAsync(base)) {
             // Almost certainly this is a generic async function `async <T>() => ...
             // But it might be a call with a type argument `async<T>();`
@@ -1409,12 +1480,12 @@ export default (superClass: Class<Parser>): Class<Parser> =>
               );
             }
           }
-        }
 
-        this.unexpected();
-      });
+          this.unexpected();
+        });
 
-      if (result) return result;
+        if (result) return result;
+      }
 
       return super.parseSubscript(base, startPos, startLoc, noCalls, state);
     }
@@ -2046,6 +2117,22 @@ export default (superClass: Class<Parser>): Class<Parser> =>
       }
     }
 
+    parseMaybeDecoratorArguments(expr: N.Expression): N.Expression {
+      if (this.isRelational("<")) {
+        const typeArguments = this.tsParseTypeArguments();
+
+        if (this.match(tt.parenL)) {
+          const call = super.parseMaybeDecoratorArguments(expr);
+          call.typeParameters = typeArguments;
+          return call;
+        }
+
+        this.unexpected(this.state.start, tt.parenL);
+      }
+
+      return super.parseMaybeDecoratorArguments(expr);
+    }
+
     // === === === === === === === === === === === === === === === ===
     // Note: All below methods are duplicates of something in flow.js.
     // Not sure what the best way to combine these is.
@@ -2115,6 +2202,7 @@ export default (superClass: Class<Parser>): Class<Parser> =>
 
     toReferencedList(
       exprList: $ReadOnlyArray<?N.Expression>,
+      isInParens?: boolean, // eslint-disable-line no-unused-vars
     ): $ReadOnlyArray<?N.Expression> {
       for (let i = 0; i < exprList.length; i++) {
         const expr = exprList[i];

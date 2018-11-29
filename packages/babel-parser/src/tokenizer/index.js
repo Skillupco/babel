@@ -881,10 +881,10 @@ export default class Tokenizer extends LocationParser {
       radix === 16
         ? allowedNumericSeparatorSiblings.hex
         : radix === 10
-          ? allowedNumericSeparatorSiblings.dec
-          : radix === 8
-            ? allowedNumericSeparatorSiblings.oct
-            : allowedNumericSeparatorSiblings.bin;
+        ? allowedNumericSeparatorSiblings.dec
+        : radix === 8
+        ? allowedNumericSeparatorSiblings.oct
+        : allowedNumericSeparatorSiblings.bin;
 
     let total = 0;
 
@@ -1070,7 +1070,6 @@ export default class Tokenizer extends LocationParser {
   readString(quote: number): void {
     let out = "",
       chunkStart = ++this.state.pos;
-    const hasJsonStrings = this.hasPlugin("jsonStrings");
     for (;;) {
       if (this.state.pos >= this.input.length) {
         this.raise(this.state.start, "Unterminated string constant");
@@ -1083,10 +1082,11 @@ export default class Tokenizer extends LocationParser {
         out += this.readEscapedChar(false);
         chunkStart = this.state.pos;
       } else if (
-        hasJsonStrings &&
-        (ch === charCodes.lineSeparator || ch === charCodes.paragraphSeparator)
+        ch === charCodes.lineSeparator ||
+        ch === charCodes.paragraphSeparator
       ) {
         ++this.state.pos;
+        ++this.state.curLine;
       } else if (isNewLine(ch)) {
         this.raise(this.state.start, "Unterminated string constant");
       } else {
@@ -1324,14 +1324,25 @@ export default class Tokenizer extends LocationParser {
   }
 
   braceIsBlock(prevType: TokenType): boolean {
-    if (prevType === tt.colon) {
-      const parent = this.curContext();
-      if (parent === ct.braceStatement || parent === ct.braceExpression) {
-        return !parent.isExpr;
-      }
+    const parent = this.curContext();
+    if (parent === ct.functionExpression || parent === ct.functionStatement) {
+      return true;
+    }
+    if (
+      prevType === tt.colon &&
+      (parent === ct.braceStatement || parent === ct.braceExpression)
+    ) {
+      return !parent.isExpr;
     }
 
-    if (prevType === tt._return) {
+    // The check for `tt.name && exprAllowed` detects whether we are
+    // after a `yield` or `of` construct. See the `updateContext` for
+    // `tt.name`.
+    if (
+      prevType === tt._return ||
+      prevType === tt._yield ||
+      (prevType === tt.name && this.state.exprAllowed)
+    ) {
       return lineBreak.test(
         this.input.slice(this.state.lastTokEnd, this.state.start),
       );
@@ -1341,13 +1352,22 @@ export default class Tokenizer extends LocationParser {
       prevType === tt._else ||
       prevType === tt.semi ||
       prevType === tt.eof ||
-      prevType === tt.parenR
+      prevType === tt.parenR ||
+      prevType === tt.arrow
     ) {
       return true;
     }
 
     if (prevType === tt.braceL) {
-      return this.curContext() === ct.braceStatement;
+      return parent === ct.braceStatement;
+    }
+
+    if (
+      prevType === tt._var ||
+      prevType === tt._let ||
+      prevType === tt._const
+    ) {
+      return false;
     }
 
     if (prevType === tt.relational) {

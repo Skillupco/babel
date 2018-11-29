@@ -6,10 +6,11 @@ import * as N from "../types";
 import type { Options } from "../options";
 import type { Pos, Position } from "../util/location";
 import type State from "../tokenizer/state";
+import { types as tc } from "../tokenizer/context";
 import * as charCodes from "charcodes";
 import { isIteratorStart } from "../util/identifier";
 
-const primitiveTypes = [
+const reservedTypes = [
   "any",
   "bool",
   "boolean",
@@ -23,6 +24,9 @@ const primitiveTypes = [
   "true",
   "typeof",
   "void",
+  "interface",
+  "extends",
+  "_",
 ];
 
 function isEsModuleType(bodyElement: N.Node): boolean {
@@ -463,7 +467,13 @@ export default (superClass: Class<Parser>): Class<Parser> =>
         } while (this.eat(tt.comma));
       }
 
-      node.body = this.flowParseObjectType(isClass, false, false, isClass);
+      node.body = this.flowParseObjectType({
+        allowStatic: isClass,
+        allowExact: false,
+        allowSpread: false,
+        allowProto: isClass,
+        allowInexact: false,
+      });
     }
 
     flowParseInterfaceExtends(): N.FlowInterfaceExtends {
@@ -484,9 +494,18 @@ export default (superClass: Class<Parser>): Class<Parser> =>
       return this.finishNode(node, "InterfaceDeclaration");
     }
 
+    checkNotUnderscore(word: string) {
+      if (word === "_") {
+        throw this.unexpected(
+          null,
+          "`_` is only allowed as a type argument to call or new",
+        );
+      }
+    }
+
     checkReservedType(word: string, startLoc: number) {
-      if (primitiveTypes.indexOf(word) > -1) {
-        this.raise(startLoc, `Cannot overwrite primitive type ${word}`);
+      if (reservedTypes.indexOf(word) > -1) {
+        this.raise(startLoc, `Cannot overwrite reserved type ${word}`);
       }
     }
 
@@ -632,8 +651,32 @@ export default (superClass: Class<Parser>): Class<Parser> =>
       this.state.inType = true;
 
       this.expectRelational("<");
+      const oldNoAnonFunctionType = this.state.noAnonFunctionType;
+      this.state.noAnonFunctionType = false;
       while (!this.isRelational(">")) {
         node.params.push(this.flowParseType());
+        if (!this.isRelational(">")) {
+          this.expect(tt.comma);
+        }
+      }
+      this.state.noAnonFunctionType = oldNoAnonFunctionType;
+      this.expectRelational(">");
+
+      this.state.inType = oldInType;
+
+      return this.finishNode(node, "TypeParameterInstantiation");
+    }
+
+    flowParseTypeParameterInstantiationCallOrNew(): N.TypeParameterInstantiation {
+      const node = this.startNode();
+      const oldInType = this.state.inType;
+      node.params = [];
+
+      this.state.inType = true;
+
+      this.expectRelational("<");
+      while (!this.isRelational(">")) {
+        node.params.push(this.flowParseTypeOrImplicitInstantiation());
         if (!this.isRelational(">")) {
           this.expect(tt.comma);
         }
@@ -656,7 +699,13 @@ export default (superClass: Class<Parser>): Class<Parser> =>
         } while (this.eat(tt.comma));
       }
 
-      node.body = this.flowParseObjectType(false, false, false, false);
+      node.body = this.flowParseObjectType({
+        allowStatic: false,
+        allowExact: false,
+        allowSpread: false,
+        allowProto: false,
+        allowInexact: false,
+      });
 
       return this.finishNode(node, "InterfaceTypeAnnotation");
     }
@@ -754,12 +803,19 @@ export default (superClass: Class<Parser>): Class<Parser> =>
       return this.finishNode(node, "ObjectTypeCallProperty");
     }
 
-    flowParseObjectType(
+    flowParseObjectType({
+      allowStatic,
+      allowExact,
+      allowSpread,
+      allowProto,
+      allowInexact,
+    }: {
       allowStatic: boolean,
       allowExact: boolean,
       allowSpread: boolean,
       allowProto: boolean,
-    ): N.FlowObjectTypeAnnotation {
+      allowInexact: boolean,
+    }): N.FlowObjectTypeAnnotation {
       const oldInType = this.state.inType;
       this.state.inType = true;
 
@@ -772,6 +828,7 @@ export default (superClass: Class<Parser>): Class<Parser> =>
 
       let endDelim;
       let exact;
+      let inexact = false;
       if (allowExact && this.match(tt.braceBarL)) {
         this.expect(tt.braceBarL);
         endDelim = tt.braceBarR;
@@ -852,22 +909,36 @@ export default (superClass: Class<Parser>): Class<Parser> =>
             }
           }
 
-          nodeStart.properties.push(
-            this.flowParseObjectTypeProperty(
-              node,
-              isStatic,
-              protoStart,
-              variance,
-              kind,
-              allowSpread,
-            ),
+          const propOrInexact = this.flowParseObjectTypeProperty(
+            node,
+            isStatic,
+            protoStart,
+            variance,
+            kind,
+            allowSpread,
+            allowInexact,
           );
+
+          if (propOrInexact === null) {
+            inexact = true;
+          } else {
+            nodeStart.properties.push(propOrInexact);
+          }
         }
 
         this.flowObjectTypeSemicolon();
       }
 
       this.expect(endDelim);
+
+      /* The inexact flag should only be added on ObjectTypeAnnotations that
+       * are not the body of an interface, declare interface, or declare class.
+       * Since spreads are only allowed in objec types, checking that is
+       * sufficient here.
+       */
+      if (allowSpread) {
+        nodeStart.inexact = inexact;
+      }
 
       const out = this.finishNode(nodeStart, "ObjectTypeAnnotation");
 
@@ -883,7 +954,8 @@ export default (superClass: Class<Parser>): Class<Parser> =>
       variance: ?N.FlowVariance,
       kind: string,
       allowSpread: boolean,
-    ): N.FlowObjectTypeProperty | N.FlowObjectTypeSpreadProperty {
+      allowInexact: boolean,
+    ): (N.FlowObjectTypeProperty | N.FlowObjectTypeSpreadProperty) | null {
       if (this.match(tt.ellipsis)) {
         if (!allowSpread) {
           this.unexpected(
@@ -901,8 +973,30 @@ export default (superClass: Class<Parser>): Class<Parser> =>
           );
         }
         this.expect(tt.ellipsis);
-        node.argument = this.flowParseType();
+        const isInexactToken = this.eat(tt.comma) || this.eat(tt.semi);
 
+        if (this.match(tt.braceR)) {
+          if (allowInexact) return null;
+          this.unexpected(
+            null,
+            "Explicit inexact syntax is only allowed inside inexact objects",
+          );
+        }
+
+        if (this.match(tt.braceBarR)) {
+          this.unexpected(
+            null,
+            "Explicit inexact syntax cannot appear inside an explicit exact object type",
+          );
+        }
+
+        if (isInexactToken) {
+          this.unexpected(
+            null,
+            "Explicit inexact syntax must appear at the end of an inexact object",
+          );
+        }
+        node.argument = this.flowParseType();
         return this.finishNode(node, "ObjectTypeSpreadProperty");
       } else {
         node.key = this.flowParseObjectPropertyKey();
@@ -1116,6 +1210,7 @@ export default (superClass: Class<Parser>): Class<Parser> =>
           return this.finishNode(node, "StringTypeAnnotation");
 
         default:
+          this.checkNotUnderscore(id.name);
           return this.flowParseGenericType(startPos, startLoc, id);
       }
     }
@@ -1146,10 +1241,22 @@ export default (superClass: Class<Parser>): Class<Parser> =>
           );
 
         case tt.braceL:
-          return this.flowParseObjectType(false, false, true, false);
+          return this.flowParseObjectType({
+            allowStatic: false,
+            allowExact: false,
+            allowSpread: true,
+            allowProto: false,
+            allowInexact: true,
+          });
 
         case tt.braceBarL:
-          return this.flowParseObjectType(false, true, true, false);
+          return this.flowParseObjectType({
+            allowStatic: false,
+            allowExact: true,
+            allowSpread: true,
+            allowProto: false,
+            allowInexact: false,
+          });
 
         case tt.bracketL:
           return this.flowParseTupleType();
@@ -1357,6 +1464,17 @@ export default (superClass: Class<Parser>): Class<Parser> =>
       this.state.exprAllowed =
         this.state.exprAllowed || this.state.noAnonFunctionType;
       return type;
+    }
+
+    flowParseTypeOrImplicitInstantiation(): N.FlowTypeAnnotation {
+      if (this.state.type === tt.name && this.state.value === "_") {
+        const startPos = this.state.start;
+        const startLoc = this.state.startLoc;
+        const node = this.parseIdentifier();
+        return this.flowParseGenericType(startPos, startLoc, node);
+      } else {
+        return this.flowParseType();
+      }
     }
 
     flowParseTypeAnnotation(): N.FlowTypeAnnotation {
@@ -1859,38 +1977,24 @@ export default (superClass: Class<Parser>): Class<Parser> =>
     // type casts that we've found that are illegal in this context
     toReferencedList(
       exprList: $ReadOnlyArray<?N.Expression>,
+      isParenthesizedExpr?: boolean,
     ): $ReadOnlyArray<?N.Expression> {
       for (let i = 0; i < exprList.length; i++) {
         const expr = exprList[i];
-        if (expr && expr._exprListItem && expr.type === "TypeCastExpression") {
-          this.raise(expr.start, "Unexpected type cast");
+        if (
+          expr &&
+          expr.type === "TypeCastExpression" &&
+          (!expr.extra || !expr.extra.parenthesized) &&
+          (exprList.length > 1 || !isParenthesizedExpr)
+        ) {
+          this.raise(
+            expr.typeAnnotation.start,
+            "The type cast expression is expected to be wrapped with parenthesis",
+          );
         }
       }
 
       return exprList;
-    }
-
-    // parse an item inside a expression list eg. `(NODE, NODE)` where NODE represents
-    // the position where this function is called
-    parseExprListItem(
-      allowEmpty: ?boolean,
-      refShorthandDefaultPos: ?Pos,
-      refNeedsArrowPos: ?Pos,
-    ): ?N.Expression {
-      const container = this.startNode();
-      const node = super.parseExprListItem(
-        allowEmpty,
-        refShorthandDefaultPos,
-        refNeedsArrowPos,
-      );
-      if (this.match(tt.colon)) {
-        container._exprListItem = true;
-        container.expression = node;
-        container.typeAnnotation = this.flowParseTypeAnnotation();
-        return this.finishNode(container, "TypeCastExpression");
-      } else {
-        return node;
-      }
     }
 
     checkLVal(
@@ -2289,7 +2393,10 @@ export default (superClass: Class<Parser>): Class<Parser> =>
       refNeedsArrowPos?: ?Pos,
     ): N.Expression {
       let jsxError = null;
-      if (tt.jsxTagStart && this.match(tt.jsxTagStart)) {
+      if (
+        this.hasPlugin("jsx") &&
+        (this.match(tt.jsxTagStart) || this.isRelational("<"))
+      ) {
         const state = this.state.clone();
         try {
           return super.parseMaybeAssign(
@@ -2305,7 +2412,10 @@ export default (superClass: Class<Parser>): Class<Parser> =>
             // Remove `tc.j_expr` and `tc.j_oTag` from context added
             // by parsing `jsxTagStart` to stop the JSX plugin from
             // messing with the tokens
-            this.state.context.length -= 2;
+            const cLength = this.state.context.length;
+            if (this.state.context[cLength - 1] === tc.j_oTag) {
+              this.state.context.length -= 2;
+            }
 
             jsxError = err;
           } else {
@@ -2510,7 +2620,7 @@ export default (superClass: Class<Parser>): Class<Parser> =>
         node.callee = base;
         const state = this.state.clone();
         try {
-          node.typeArguments = this.flowParseTypeParameterInstantiation();
+          node.typeArguments = this.flowParseTypeParameterInstantiationCallOrNew();
           this.expect(tt.parenL);
           node.arguments = this.parseCallExpressionArguments(tt.parenR, false);
           if (subscriptState.optionalChainMember) {
@@ -2541,7 +2651,7 @@ export default (superClass: Class<Parser>): Class<Parser> =>
       if (this.shouldParseTypes() && this.isRelational("<")) {
         const state = this.state.clone();
         try {
-          targs = this.flowParseTypeParameterInstantiation();
+          targs = this.flowParseTypeParameterInstantiationCallOrNew();
         } catch (e) {
           if (e instanceof SyntaxError) {
             this.state = state;

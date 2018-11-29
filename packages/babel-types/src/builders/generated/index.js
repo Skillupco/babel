@@ -620,6 +620,10 @@ export function ClassPrivateProperty(...args: Array<any>): Object {
   return builder("ClassPrivateProperty", ...args);
 }
 export { ClassPrivateProperty as classPrivateProperty };
+export function ClassPrivateMethod(...args: Array<any>): Object {
+  return builder("ClassPrivateMethod", ...args);
+}
+export { ClassPrivateMethod as classPrivateMethod };
 export function Import(...args: Array<any>): Object {
   return builder("Import", ...args);
 }
@@ -793,6 +797,16 @@ export function TSTupleType(...args: Array<any>): Object {
 }
 export { TSTupleType as tsTupleType };
 export { TSTupleType as tSTupleType };
+export function TSOptionalType(...args: Array<any>): Object {
+  return builder("TSOptionalType", ...args);
+}
+export { TSOptionalType as tsOptionalType };
+export { TSOptionalType as tSOptionalType };
+export function TSRestType(...args: Array<any>): Object {
+  return builder("TSRestType", ...args);
+}
+export { TSRestType as tsRestType };
+export { TSRestType as tSRestType };
 export function TSUnionType(...args: Array<any>): Object {
   return builder("TSUnionType", ...args);
 }

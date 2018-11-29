@@ -687,6 +687,12 @@ export function assertClassPrivateProperty(
 ): void {
   assert("ClassPrivateProperty", node, opts);
 }
+export function assertClassPrivateMethod(
+  node: Object,
+  opts?: Object = {},
+): void {
+  assert("ClassPrivateMethod", node, opts);
+}
 export function assertImport(node: Object, opts?: Object = {}): void {
   assert("Import", node, opts);
 }
@@ -824,6 +830,12 @@ export function assertTSArrayType(node: Object, opts?: Object = {}): void {
 }
 export function assertTSTupleType(node: Object, opts?: Object = {}): void {
   assert("TSTupleType", node, opts);
+}
+export function assertTSOptionalType(node: Object, opts?: Object = {}): void {
+  assert("TSOptionalType", node, opts);
+}
+export function assertTSRestType(node: Object, opts?: Object = {}): void {
+  assert("TSRestType", node, opts);
 }
 export function assertTSUnionType(node: Object, opts?: Object = {}): void {
   assert("TSUnionType", node, opts);
