@@ -203,7 +203,7 @@ export default async function({ cliOptions, babelOptions }) {
         .watch(filenames, {
           persistent: true,
           ignoreInitial: true,
-          ignored: cliOptions.ignore,
+          ignored: babelOptions.ignore,
           awaitWriteFinish: {
             stabilityThreshold: 50,
             pollInterval: 10,

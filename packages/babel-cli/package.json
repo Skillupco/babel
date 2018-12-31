@@ -1,6 +1,6 @@
 {
   "name": "@skillup/babel-cli",
-  "version": "7.2.3",
+  "version": "7.2.3-fix",
   "description": "Babel command line.",
   "author": "Sebastian McKenzie <sebmck@gmail.com>",
   "homepage": "https://babeljs.io/",
