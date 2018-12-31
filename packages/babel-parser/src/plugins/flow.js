@@ -1384,6 +1384,10 @@ export default (superClass: Class<Parser>): Class<Parser> =>
         default:
           if (this.state.type.keyword === "typeof") {
             return this.flowParseTypeofType();
+          } else if (this.state.type.keyword) {
+            const label = this.state.type.label;
+            this.next();
+            return super.createIdentifier(node, label);
           }
       }
 
@@ -1842,7 +1846,9 @@ export default (superClass: Class<Parser>): Class<Parser> =>
       super.assertModuleNodeAllowed(node);
     }
 
-    parseExport(node: N.ExportNamedDeclaration): N.ExportNamedDeclaration {
+    parseExport(
+      node: N.ExportNamedDeclaration | N.ExportAllDeclaration,
+    ): N.ExportNamedDeclaration | N.ExportAllDeclaration {
       node = super.parseExport(node);
       if (
         node.type === "ExportNamedDeclaration" ||
@@ -2695,21 +2701,34 @@ export default (superClass: Class<Parser>): Class<Parser> =>
       super.readToken_mult_modulo(code);
     }
 
+    parseTopLevel(file: N.File, program: N.Program): N.File {
+      const fileNode = super.parseTopLevel(file, program);
+      if (this.state.hasFlowComment) {
+        this.unexpected(null, "Unterminated flow-comment");
+      }
+      return fileNode;
+    }
+
     skipBlockComment(): void {
       if (
         this.hasPlugin("flow") &&
         this.hasPlugin("flowComments") &&
         this.skipFlowComment()
       ) {
+        if (this.state.hasFlowComment) {
+          this.unexpected(
+            null,
+            "Cannot have a flow comment inside another flow comment",
+          );
+        }
         this.hasFlowCommentCompletion();
         this.state.pos += this.skipFlowComment();
         this.state.hasFlowComment = true;
         return;
       }
 
-      let end;
       if (this.hasPlugin("flow") && this.state.hasFlowComment) {
-        end = this.input.indexOf("*-/", (this.state.pos += 2));
+        const end = this.input.indexOf("*-/", (this.state.pos += 2));
         if (end === -1) this.raise(this.state.pos - 2, "Unterminated comment");
         this.state.pos = end + 3;
         return;
@@ -2719,17 +2738,32 @@ export default (superClass: Class<Parser>): Class<Parser> =>
     }
 
     skipFlowComment(): number | boolean {
-      const ch2 = this.input.charCodeAt(this.state.pos + 2);
-      const ch3 = this.input.charCodeAt(this.state.pos + 3);
+      const { pos } = this.state;
+      let shiftToFirstNonWhiteSpace = 2;
+      while (
+        [charCodes.space, charCodes.tab].includes(
+          this.input.charCodeAt(pos + shiftToFirstNonWhiteSpace),
+        )
+      ) {
+        shiftToFirstNonWhiteSpace++;
+      }
+
+      const ch2 = this.input.charCodeAt(shiftToFirstNonWhiteSpace + pos);
+      const ch3 = this.input.charCodeAt(shiftToFirstNonWhiteSpace + pos + 1);
 
       if (ch2 === charCodes.colon && ch3 === charCodes.colon) {
-        return 4; // check for /*::
+        return shiftToFirstNonWhiteSpace + 2; // check for /*::
       }
-      if (this.input.slice(this.state.pos + 2, 14) === "flow-include") {
-        return 14; // check for /*flow-include
+      if (
+        this.input.slice(
+          shiftToFirstNonWhiteSpace + pos,
+          shiftToFirstNonWhiteSpace + pos + 12,
+        ) === "flow-include"
+      ) {
+        return shiftToFirstNonWhiteSpace + 12; // check for /*flow-include
       }
       if (ch2 === charCodes.colon && ch3 !== charCodes.colon) {
-        return 2; // check for /*:, advance only 2 steps
+        return shiftToFirstNonWhiteSpace; // check for /*:, advance up to :
       }
       return false;
     }

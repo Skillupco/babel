@@ -137,7 +137,11 @@ export default async function({ cliOptions, babelOptions }) {
         const dirname = filename;
 
         util
-          .readdirForCompilable(filename, cliOptions.includeDotfiles)
+          .readdirForCompilable(
+            filename,
+            cliOptions.includeDotfiles,
+            cliOptions.extensions,
+          )
           .forEach(function(filename) {
             _filenames.push(path.join(dirname, filename));
           });
@@ -199,7 +203,7 @@ export default async function({ cliOptions, babelOptions }) {
         .watch(filenames, {
           persistent: true,
           ignoreInitial: true,
-          ignored: opts.ignore,
+          ignored: cliOptions.ignore,
           awaitWriteFinish: {
             stabilityThreshold: 50,
             pollInterval: 10,

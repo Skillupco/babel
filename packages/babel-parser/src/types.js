@@ -566,6 +566,38 @@ export type SequenceExpression = NodeBase & {
   expressions: $ReadOnlyArray<Expression>,
 };
 
+// Pipelines
+
+export type PipelineBody = NodeBase & {
+  type: "PipelineBody",
+};
+
+export type PipelineBareFunctionBody = NodeBase & {
+  type: "PipelineBareFunctionBody",
+  callee: Expression,
+};
+
+export type PipelineBareConstructorBody = NodeBase & {
+  type: "PipelineBareConstructorBody",
+  callee: Expression,
+};
+
+export type PipelineBareAwaitedFunctionBody = NodeBase & {
+  type: "PipelineBareAwaitedFunctionBody",
+  callee: Expression,
+};
+
+export type PipelineTopicBody = NodeBase & {
+  type: "PipelineTopicBody",
+  expression: Expression,
+};
+
+export type PipelineStyle =
+  | "PipelineBareFunction"
+  | "PipelineBareConstructor"
+  | "PipelineBareAwaitedFunction"
+  | "PipelineTopicExpression";
+
 // Template Literals
 
 export type TemplateLiteral = NodeBase & {
@@ -1125,6 +1157,7 @@ export type TsKeywordTypeType =
   | "TSNumberKeyword"
   | "TSObjectKeyword"
   | "TSBooleanKeyword"
+  | "TSBigIntKeyword"
   | "TSStringKeyword"
   | "TSSymbolKeyword"
   | "TSVoidKeyword"
