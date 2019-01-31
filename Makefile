@@ -1,6 +1,6 @@
 MAKEFLAGS = -j1
-FLOW_COMMIT = e192e1a4793dd8e43415fbfe8046d832cb513c8b
-TEST262_COMMIT = 238c88d4a084d9928372954e2fec54af2c951281
+FLOW_COMMIT = 2ac56861e3ceff9ca406ae586fbafb3480c6c0b7
+TEST262_COMMIT = 4f1155c566a222238fd86f179c6635ecb4c289bb
 
 # Fix color output until TravisCI fixes https://github.com/travis-ci/travis-ci/issues/7967
 export FORCE_COLOR = true
@@ -15,8 +15,8 @@ build: clean clean-lib
 	# call build again as the generated files might need to be compiled again.
 	./node_modules/.bin/gulp build
 	# generate flow and typescript typings
-	node scripts/generators/flow.js > ./packages/babel-types/lib/index.js.flow
-	node scripts/generators/typescript.js > ./packages/babel-types/lib/index.d.ts
+	node packages/babel-types/scripts/generators/flow.js > ./packages/babel-types/lib/index.js.flow
+	node packages/babel-types/scripts/generators/typescript.js > ./packages/babel-types/lib/index.d.ts
 ifneq ("$(BABEL_COVERAGE)", "true")
 	make build-standalone
 	make build-preset-env-standalone
@@ -46,7 +46,8 @@ watch: clean clean-lib
 	# development too.
 	BABEL_ENV=development ./node_modules/.bin/gulp build-no-bundle
 	node ./packages/babel-types/scripts/generateTypeHelpers.js
-	node scripts/generators/flow.js > ./packages/babel-types/lib/index.js.flow
+	node packages/babel-types/scripts/generators/flow.js > ./packages/babel-types/lib/index.js.flow
+	node packages/babel-types/scripts/generators/typescript.js > ./packages/babel-types/lib/index.d.ts
 	BABEL_ENV=development ./node_modules/.bin/gulp watch
 
 flow:
@@ -102,7 +103,7 @@ test-flow-update-whitelist:
 bootstrap-test262:
 	rm -rf ./build/test262
 	mkdir -p ./build
-	git clone --branch=master --single-branch --shallow-since=2018-11-01 https://github.com/tc39/test262.git ./build/test262
+	git clone --branch=master --single-branch --shallow-since=2010-01-10 https://github.com/tc39/test262.git ./build/test262
 	cd build/test262 && git checkout $(TEST262_COMMIT)
 
 test-test262:
