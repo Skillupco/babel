@@ -44,6 +44,19 @@ export default declare((api, options) => {
     return false;
   }
 
+  /**
+   * Test if an ObjectPattern's elements contain any RestElements.
+   */
+
+  function hasObjectRest(pattern) {
+    for (const elem of (pattern.properties: Array)) {
+      if (t.isRestElement(elem)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   const STOP_TRAVERSAL = {};
 
   // NOTE: This visitor is meant to be used via t.traverse
@@ -83,7 +96,11 @@ export default declare((api, options) => {
 
       if (op) {
         node = t.expressionStatement(
-          t.assignmentExpression(op, id, t.cloneNode(init)),
+          t.assignmentExpression(
+            op,
+            id,
+            t.cloneNode(init) || this.scope.buildUndefinedNode(),
+          ),
         );
       } else {
         node = t.variableDeclaration(this.kind, [
@@ -259,6 +276,31 @@ export default declare((api, options) => {
         objRef = temp;
       }
 
+      // Replace impure computed key expressions if we have a rest parameter
+      if (hasObjectRest(pattern)) {
+        let copiedPattern;
+        for (let i = 0; i < pattern.properties.length; i++) {
+          const prop = pattern.properties[i];
+          if (t.isRestElement(prop)) {
+            break;
+          }
+          const key = prop.key;
+          if (prop.computed && !this.scope.isPure(key)) {
+            const name = this.scope.generateUidIdentifierBasedOnNode(key);
+            this.nodes.push(this.buildVariableDeclaration(name, key));
+            if (!copiedPattern) {
+              copiedPattern = pattern = {
+                ...pattern,
+                properties: pattern.properties.slice(),
+              };
+            }
+            copiedPattern.properties[i] = {
+              ...copiedPattern.properties[i],
+              key: name,
+            };
+          }
+        }
+      }
       //
 
       for (let i = 0; i < pattern.properties.length; i++) {
@@ -421,7 +463,7 @@ export default declare((api, options) => {
 
         const specifiers = [];
 
-        for (const name in path.getOuterBindingIdentifiers(path)) {
+        for (const name of Object.keys(path.getOuterBindingIdentifiers(path))) {
           specifiers.push(
             t.exportSpecifier(t.identifier(name), t.identifier(name)),
           );

@@ -54,9 +54,7 @@ export function createClassFeaturePlugin({
 
         verifyUsedFeatures(path, this.file);
 
-        // Only fields are currently supported, this needs to be moved somewhere
-        // else when other features are added.
-        const loose = isLoose(this.file, FEATURES.fields);
+        const loose = isLoose(this.file, feature);
 
         let constructor;
         let isDecorated = hasOwnDecorators(path.node);
@@ -159,6 +157,7 @@ export function createClassFeaturePlugin({
           keysNodes = extractComputedKeys(ref, path, computedPaths, this.file);
           ({ staticNodes, instanceNodes, wrapClass } = buildFieldsInitNodes(
             ref,
+            path.node.superClass,
             props,
             privateNamesMap,
             state,

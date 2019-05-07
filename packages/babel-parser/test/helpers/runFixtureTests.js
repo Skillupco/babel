@@ -131,6 +131,14 @@ function runTest(test, parseFunction) {
       if (err.message === opts.throws) {
         return;
       } else {
+        if (process.env.OVERWRITE) {
+          const fn = path.dirname(test.expect.loc) + "/options.json";
+          test.options = test.options || {};
+          test.options.throws = err.message;
+          fs.writeFileSync(fn, JSON.stringify(test.options, null, "  "));
+          return;
+        }
+
         err.message =
           "Expected error message: " +
           opts.throws +
@@ -195,12 +203,12 @@ function misMatch(exp, act) {
       return ppJSON(exp) + " !== " + ppJSON(act);
     }
   } else {
-    for (const prop in exp) {
+    for (const prop of Object.keys(exp)) {
       const mis = misMatch(exp[prop], act[prop]);
       if (mis) return addPath(mis, prop);
     }
 
-    for (const prop in act) {
+    for (const prop of Object.keys(act)) {
       if (typeof act[prop] === "function") {
         continue;
       }
